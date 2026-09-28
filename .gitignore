@@ -1,0 +1,25 @@
+# deps / build
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# python
+__pycache__/
+.venv/
+*.pyc
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# generated data (history Parquet, ground truth, reports)
+data/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.log

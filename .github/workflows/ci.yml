@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: install → lint → typecheck → test + coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Lint (ESLint + Prettier)
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests + coverage (domain >= 80%)
+        run: npm test
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            node -e "const s=require('./coverage/coverage-summary.json').total;console.log('| metric | % |\n|---|---|\n'+Object.entries(s).map(([k,v])=>'| '+k+' | '+v.pct+' |').join('\n'))" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+      - name: Validate compose file
+        run: docker compose config -q
+
+  semgrep:
+    name: SAST (Semgrep, fail on ERROR only)
+    runs-on: ubuntu-24.04
+    container:
+      image: semgrep/semgrep:1.178.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep scan
+        run: semgrep scan --config p/typescript --config p/nodejs --config p/dockerfile --config p/secrets --severity ERROR --error --metrics off
+
+  trivy:
+    name: Dependency, secret and config scan (Trivy, fail on CRITICAL)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true

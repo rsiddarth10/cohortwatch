@@ -15,7 +15,8 @@ plain-language clues → workshop queue, runaway alerts, and campaigns (fault fa
   Express + zod + zod-to-openapi + helmet + express-rate-limit [S7], React + Vite [S8], Python 3.12 batch/ML [S3/S9].
 - Pinned images (never `latest`):
   - `docker.redpanda.com/redpandadata/redpanda:v24.2.7`, `docker.redpanda.com/redpandadata/console:v2.7.2`
-  - `postgres:16.4` [1a–S2] → `timescale/timescaledb-ha:pg16.15-ts2.30.1` [S3+]
+  - `timescale/timescaledb-ha:pg16.15-ts2.30.1` (TimescaleDB + pgvector) from 1a — overrides the brief's postgres:16.4; no switch in S3
+  - Host ports: Postgres 15432, Redis 16379 (5432/6379 are taken on the dev machine)
   - `redis/redis-stack-server:7.4.0-v1`
 - Named volumes; `docker compose down -v` is the clean reset.
 

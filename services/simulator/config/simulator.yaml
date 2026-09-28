@@ -1,0 +1,29 @@
+# Simulator configuration (brief §5). Environment variables override these values:
+#   SIM_SCALE, SIM_SEED, SIM_WORKERS, SIM_T0, PLANTS, KAFKA_BROKERS, DATABASE_URL, METRICS_PORT, LOG_LEVEL
+
+scale: 5000 # vehicles; compose sets 100000
+seed: cohortwatch-42
+workers: 4 # processes, each owning a contiguous VIN range; output is identical for any value
+t0: '2026-09-28T04:00:00Z' # start of the live stream = end of history
+plants: 'off' # step 1b
+
+kafka:
+  brokers: localhost:19092
+  clientId: cw-simulator
+  lingerMs: 10
+
+databaseUrl: postgres://cw_sim:cw_sim_dev@localhost:15432/cohortwatch
+metricsPort: 9464
+tickMs: 250 # how often each worker drains due events (wall ms)
+logLevel: info
+
+# Healthy-model parameters. Omitted keys use the defaults in packages/domain/src/params.ts.
+model:
+  historyDays: 7
+  cadenceMin: 30
+  heartbeatH: 4
+  dtcPerVehicleDay: 0.02
+  naturallyHotShare: 0.02
+  s1CohortSize: 60
+  s1OtherModelSize: 10
+  s1bCohortSize: 30

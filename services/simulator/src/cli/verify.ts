@@ -55,6 +55,18 @@ function streamOf(world: World, vin: string, from: number, to: number, plants = 
 
 async function main(): Promise<void> {
   const cfg = loadSimulatorConfigFile(configPath());
+  // The running stack decides N, seed and T0 (compose sets SIM_SCALE=100000; the host yaml says 5000).
+  // Comparing against a different world would fail checks for the wrong reason, so refuse instead.
+  const seeded = await seededWorld(cfg.databaseUrl);
+  if (!seeded || seeded.n !== cfg.scale || seeded.seed !== cfg.seed || seeded.t0.getTime() !== Date.parse(cfg.t0)) {
+    console.error(
+      `verify is configured for N=${cfg.scale} seed=${cfg.seed} T0=${cfg.t0}, but the stack is seeded with ` +
+        (seeded ? `N=${seeded.n} seed=${seeded.seed} T0=${seeded.t0.toISOString()}` : 'nothing') +
+        `.
+Set SIM_SCALE / SIM_SEED / SIM_T0 to match, e.g. SIM_SCALE=${seeded?.n ?? 100000} npm run simulator:verify`,
+    );
+    process.exit(2);
+  }
   const sampleS = Number(process.env.VERIFY_SAMPLE_S ?? 120);
   const out = process.env.VERIFY_OUT ?? 'docs/perf/verify-1b.txt';
   const world = buildWorld(cfg);
@@ -470,6 +482,17 @@ async function scrapeMess(port: number): Promise<Record<string, number>> {
     return out;
   } catch {
     return {};
+  }
+}
+
+async function seededWorld(databaseUrl: string): Promise<{ seed: string; n: number; t0: Date } | undefined> {
+  const client = new pg.Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    return (await client.query<{ seed: string; n: number; t0: Date }>('SELECT seed, n, t0 FROM sim.seed_state'))
+      .rows[0];
+  } finally {
+    await client.end();
   }
 }
 

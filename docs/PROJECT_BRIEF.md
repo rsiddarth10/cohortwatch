@@ -29,6 +29,7 @@ This file is the source of truth for scope. `CLAUDE.md` points here.
 **1. Workshop queue** (daily use) **[S4]**
 - Ranked per depot by severity, trend, campaign size, runaway flag, in-service-tomorrow, and a capped behaviour weight.
 - Includes solo incidents, campaign members, and at-risk vans (at a lower weight).
+- **At-risk (amended before 1b):** in **S4**, a single van whose **own trend** is heading for its line. From **S5**, a van is also at-risk when it is a cohort sister of an open campaign (same profile and trend, not yet crossed).
 - Fills today's and tomorrow's bays in rank order.
 - Each item shows its reasons and a rough cost of waiting (rates in config).
 - A loud-but-stable van ranks below a quiet van that is getting worse.
@@ -134,7 +135,8 @@ If a feature does not change **incident, membership or queue rank**, it is out o
 - **Infrastructure (pin exact tags, never `latest`):**
   - Redpanda: `docker.redpanda.com/redpandadata/redpanda:v24.2.7` (Kafka API + built-in schema registry).
   - Redpanda Console: `docker.redpanda.com/redpandadata/console:v2.7.2`.
-  - Postgres: `postgres:16.4` **[1a–S2]**. Switch to `timescale/timescaledb-ha:pg16` (TimescaleDB + pgvector) in **[S3]** and reseed.
+  - Postgres: `timescale/timescaledb-ha:pg16.15-ts2.30.1` (TimescaleDB + pgvector) **from 1a** (amended in 1a; replaces `postgres:16.4`, no switch in S3).
+  - Object store **[1b]**: an S3-compatible server, pinned, for the Parquet lake (see §5.6). MinIO's public images were withdrawn from Docker Hub, so the compose default is RustFS (`rustfs/rustfs:1.0.0`, S3 API); any S3-compatible endpoint works via env vars.
   - Redis: `redis/redis-stack-server:7.4.0-v1`.
   - If a tag fails to pull, pin the nearest existing patch version and record it in the README.
 - Named volumes for Postgres and Redpanda. `docker compose down -v` is the clean reset.
@@ -146,6 +148,7 @@ If a feature does not change **incident, membership or queue rank**, it is out o
 - **Delivery:** at-least-once delivery with idempotent effects everywhere.
 - **Clocks:** simulated event time is **never** mixed with wall-clock time. Latency is always measured in wall-clock time.
 - **No leaks:** detection code **never** reads ground truth or simulator-private data. This is enforced by a separate DB schema and role, not by convention.
+  - **File system too (amended before 1b):** simulator-private files live under `data/sim-private/`. That path is mounted **only** into the simulator and, later, the evaluation job. Detection services (S2–S8) must never mount it.
 - **Synthetic data only:**
   - Fictitious OEMs: "Aurex" (OEM-A) and "Kestrel" (OEM-B).
   - Synthetic coordinates, no real addresses.
@@ -170,13 +173,29 @@ If a feature does not change **incident, membership or queue rank**, it is out o
 | **1a** | Monorepo + compose (pinned) + migrations + registry seeding + **healthy** signal model + both OEM formats streaming live + tests + CI |
 | **1b** | Plants, mess injection, clock modes (demo 360×, bench, burst, reset), history Parquet, ground truth, `simulator:verify` |
 | **S2** | Normaliser: adapters, validation, VIN check digit, DTC → fault family, unit conversion, per-VIN anti-replay dedup (Redis), DLQ → `telemetry.canonical.v1` (Avro via registry) |
-| **S3** | State processor: EW trend (O(1) sums in Redis), baselines from history (DuckDB script), peer adjustment, k-of-n, incidents + clues, time-to-limit / runaway; switch to the Timescale image |
+| **S3** | State processor: EW trend (O(1) sums in Redis), baselines from history (DuckDB script), peer adjustment, k-of-n, incidents + clues, time-to-limit / runaway (Timescale image is already in place since 1a) |
 | **S4** | Queue: scoring, at-risk, runaway, bay assignment, cost of waiting |
 | **S5** | Campaign engine: family key, Poisson guard, join once, union-find, at-risk sisters, firmware clue, money, outbox |
 | **S6** | Fix confirmation (`workshop.repairs.v1`) |
 | **S7** | API: JWT roles, Postgres RLS, keyset pagination, rate limits, audit, SSE, viewer masking |
 | **S8** | Web UI (board + queue panel, campaign page, vehicle-vs-own-normal chart) + template agent |
 | **S9** | Batch + evaluation (Section 6), throughput + chaos tests, BDD, full CI |
+| **S10** | Deliverables (see below) |
+
+**Later gaps against the problem statement (amended before 1b; recorded here, built in the step named):**
+- **S2:** Testcontainers integration tests start here. Every service exposes Prometheus `/metrics` from now on.
+- **S3:** a telemetry writer that down-samples into a Timescale hypertable (partitioned by time, segmented by VIN), used by the S8 vehicle chart.
+- **S7:** OAuth2/OIDC (Keycloak, or a small local OIDC issuer), plus a right-to-erasure flow and its test (GDPR/DPDP).
+- **S9:**
+  - an ML at-risk classifier, evaluated against the rule and global-threshold baselines
+  - EXPLAIN ANALYZE before/after on the slowest queries
+  - Grafana
+  - k6 and soak tests
+  - Pact contract tests
+- **S10 Deliverables (new):**
+  - Helm/K8s manifests, Terraform (one cloud), STRIDE threat model
+  - Architecture and ER diagrams, 3–5 ADRs (including "device-free ingestion, no MQTT" and "Node over Python")
+  - Solution document from the template, 5-minute video, tag `v1.0-submission`
 
 ---
 
@@ -300,6 +319,8 @@ If a feature does not change **incident, membership or queue rank**, it is out o
 ```
 Format v2 is added in **[1b]**: °C and renamed fields, e.g. `engine:{coolant:{tempC}}`.
 
+**Fuel (amended in 1a):** both formats carry fuel level for diesel vans: Aurex `fuel:{pct}` (null when absent), Kestrel `fl` (key omitted when absent). Aurex also carries `idle` (seconds).
+
 **OEM-B "Kestrel": flat compact JSON.**
 ```
 {id, ts (epoch ms), sq, e, g:[lat,lon], s, o, ct, bt, soc (0–1), v, a,
@@ -311,6 +332,7 @@ Format v2 is added in **[1b]**: °C and renamed fields, e.g. `engine:{coolant:{t
 - **Headers:** `x-sent-at` (wall-clock ms) and `x-source-format` (e.g. `aurex.v1`).
 - **Producer:** idempotent, `acks=all`, zstd compression, batching with linger 5–20 ms.
 - **Workers:** N worker processes, each owning a VIN range. Throughput (msgs/s) is logged every 5 s.
+- **Host ports (amended in 1a):** Postgres `15432`, Redis `16379` (5432/6379 are often taken by local installs). Container ports are unchanged.
 
 ### 5.4 Plants **[1b]** (all timings in sim-hours from **T0** = start of the live stream = end of history; everything recorded in `sim.scenario_manifest`; switchable via `PLANTS=on|off`)
 
@@ -320,7 +342,7 @@ Format v2 is added in **[1b]**: °C and renamed fields, e.g. `engine:{coolant:{t
 | **S1 healthy cohort** | The other ≥ 42 same-model/duty vans at Depot S1 stay healthy | At-risk flags go mostly to sisters |
 | **Firmware clue** | That model's firmware 4.2.1 rolls out over T0−48 h…T0. At Depot S1, **16 of 18 sisters** get it in the 3 days before onset, vs **~20 of 42 healthy peers** | "16/18 vs 48%" clue |
 | **S1b outbreak** | 8 vans, same model/family/duty, at Depot S1b (different region); onset T0+18 h | A second, separate campaign, never merged |
-| **Runaway** | 1 **linehaul** van on **OEM-A**, a different model and depot; from T0+10 h its temperature **accelerates** (quadratic) to the hard limit at ~T0+34 h | Critical at < 12 h to limit, with ≥ 15 readings to spare |
+| **Runaway** | 1 **linehaul** van on **OEM-A**, a different model and depot; from T0+10 h its temperature **accelerates** (quadratic) to the hard limit at ~T0+34 h. **Amended:** its shift is fixed so it is **driving continuously from T0+10 h to T0+34 h** (a team-driven linehaul run); the drift is a function of sim time; `limit_ts` = the first **driving** reading at or above the hard limit | Critical at < 12 h to limit, with ≥ 15 **driving** readings to spare |
 | **Scattered decoy** | 6 diesel vans at 6 different depots/duties (none matching S1/S1b), each with a real COOLING drift and codes, independent onsets | Incidents yes, campaign no |
 | **Same-depot, other-model decoy** | 2 vans at Depot S1, a different diesel model, COOLING drift | Not in the S1 campaign |
 | **Heatwave** | A region **not** containing S1/S1b: ambient +10 °C over T0+12 h…T0+60 h | Many high readings, zero campaigns |
@@ -332,7 +354,7 @@ Format v2 is added in **[1b]**: °C and renamed fields, e.g. `engine:{coolant:{t
 
 ### 5.5 Mess injection **[1b]** (applies to all vans, including plant vans)
 - **2%** exact duplicates (same VIN + seq, re-sent later).
-- **5%** out-of-order (delayed 1–600 wall-seconds).
+- **5%** out-of-order, delayed **1–60 sim-minutes** (amended before 1b: the old 1–600 wall-seconds meant up to 60 sim-hours late at 360×). Offline bursts remain the rare, genuinely late case.
 - **Offline bursts:** ~1% of vans per sim-day go offline for 30–180 sim-minutes, then flush the backlog with their original `event_ts` / `seq`.
 - **0.1%** malformed JSON or missing required fields.
 - **0.05%** invalid VINs.
@@ -342,12 +364,16 @@ Format v2 is added in **[1b]**: °C and renamed fields, e.g. `engine:{coolant:{t
 - **OEM-A format switch** at T0+12 h (v1 °F → v2 °C, renamed fields). S1 is on OEM-B, so the demo is unaffected; the runaway van is on OEM-A, which tests the switch.
 
 ### 5.6 Clock modes **[1b]**
-- **history:** writes **7 sim-days before T0** as Parquet (DuckDB) to `data/history/` (~17M rows at N = 100K).
+- **history:** writes **7 sim-days before T0** as Parquet (DuckDB) (~17M rows at N = 100K).
+  - **Location (amended before 1b, cloud-agnostic):** `s3://cohortwatch-lake/history/dt=YYYY-MM-DD/` on the compose object store (§2.1). The bucket is created by an idempotent one-shot init job. The same code works against any S3-compatible endpoint via env vars (endpoint, region, keys, path-style).
+  - **Size options:** `--days` and `--interval-min`. The default stays 7 days at the normal cadence. A documented `history:big` script (e.g. 30 days at 2-minute intervals, ≈ 1B rows) exists but is **not** run by default.
+  - Idempotent: a restart does not regenerate history unless `--reset` is passed.
   - Plant-free, but includes background codes and naturally-hot vans.
   - Uses the same per-vehicle profile as the live stream.
 - **demo** (compose default):
   - **360×** speed (1 wall-second = 6 sim-minutes), so active vans report about every 5 wall-seconds. Target **~10K msgs/s at N = 100K**.
-  - Plays T0 → T0+60 h in ~10 wall-minutes.
+  - **Amended:** the scenario runs T0 → **T0+72 h** (≈ 12 wall-minutes), then the simulator **keeps running** healthy so fix confirmation has time.
+  - **Repairs:** `npm run sim:repair -- --vin <VIN>` publishes `{vin, repaired_at}` to `workshop.repairs.v1` (the UI publishes the same message in S6/S8). Config `AUTO_REPAIRS=off|on` (default **off**); when on, repairs for the S1 sisters are scheduled at ~T0+30 h for unattended demo runs.
   - A "shift start" surge (3× send rate for a few minutes) at T0+24 h.
   - `--reset` restarts from T0.
 - **bench:** every vehicle every wall-second (~100K msgs/s target at N = 100K); realism is ignored.
@@ -355,7 +381,7 @@ Format v2 is added in **[1b]**: °C and renamed fields, e.g. `engine:{coolant:{t
   - Report the achieved rate honestly.
 
 ### 5.7 Ground truth **[1b]** (simulator-private)
-`sim.ground_truth` and `data/ground_truth.parquet` with columns:
+`sim.ground_truth` and **`data/sim-private/ground_truth.parquet`** (amended: the `sim-private` directory is mounted only into the simulator and the evaluation job, see §2.2) with columns:
 ```
 vin, scenario_id, role, fault_family, onset_ts, late, limit_ts, expected_campaign, repair_outcome
 ```
@@ -368,13 +394,13 @@ Role is one of: `s1_sister`, `s1_late_sister`, `s1_healthy_cohort`, `s1b_sister`
 4. Decoys, the heatwave region and the runaway van do not overlap S1/S1b depots or keys.
 5. History ends before the first onset and contains zero plant drift.
 6. Urban vans average ≥ 20 readings per sim-day (active + heartbeat), and ≥ 18 while the ignition is on.
-7. Runaway: ≥ 15 readings between the "< 12 h to limit" point and the limit.
+7. Runaway: ≥ 15 **driving** readings between the "< 12 h to limit" point and `limit_ts`.
 8. S1: ≥ 20 readings per main (non-late) sister between onset and the +8 °C point.
 9. The firmware split at Depot S1 matches the manifest.
-10. **The heatwave is hard:** without peer adjustment, ≥ 30% of the affected region would exceed a simple global threshold.
-11. **Naturally-hot vans exceed the global coolant threshold** during normal operation.
+10. **The heatwave is hard:** without peer adjustment, ≥ 30% of the affected region would exceed a simple global threshold: `GLOBAL_COOLANT_THRESHOLD_C` for engines and `GLOBAL_BATT_TEMP_THRESHOLD_C` for EV battery temperature (both config).
+11. **Naturally-hot vans exceed the global coolant threshold** during normal operation. Config `GLOBAL_COOLANT_THRESHOLD_C` (default 97) must satisfy both: naturally-hot vans exceed it in **≥ 50%** of their active readings, and other healthy diesel vans in **< 1%**. The check asserts both.
 12. Observed mess rates in a 2-minute sample are within ±30% of config.
-13. The same seed produces identical first 1,000 messages.
+13. The same seed produces identical first 1,000 messages, compared **by content, ordered by (vin, seq)**, not by arrival order (mess injection legitimately changes arrival order between runs).
 14. `cw_app` cannot `SELECT` from schema `sim`.
 
 ---

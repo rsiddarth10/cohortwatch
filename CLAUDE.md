@@ -18,6 +18,7 @@ plain-language clues → workshop queue, runaway alerts, and campaigns (fault fa
   - `timescale/timescaledb-ha:pg16.15-ts2.30.1` (TimescaleDB + pgvector) from 1a — overrides the brief's postgres:16.4; no switch in S3
   - Host ports: Postgres 15432, Redis 16379 (5432/6379 are taken on the dev machine)
   - `redis/redis-stack-server:7.4.0-v1`
+  - Object store [1b]: `rustfs/rustfs:1.0.0` (S3 API; MinIO's images were withdrawn). Code is S3-generic via env vars.
 - Named volumes; `docker compose down -v` is the clean reset.
 
 ## Rules (brief §2.2)
@@ -26,6 +27,8 @@ plain-language clues → workshop queue, runaway alerts, and campaigns (fault fa
 - At-least-once delivery, idempotent effects everywhere.
 - Sim event time is never mixed with wall-clock time. Latency is measured in wall time.
 - No leaks: detection never reads ground truth or `sim.*`. Enforced by DB schema + role (`cw_app` has no access to `sim`).
+- No leaks via files: `data/sim-private/` (ground truth) is mounted ONLY into the simulator and the evaluation job.
+  Never mount it into a detection service (normaliser … agent, S2–S8).
 - Synthetic data only: fictitious OEMs "Aurex" (OEM-A) and "Kestrel" (OEM-B), synthetic coordinates.
 - Keep `docs/DECLARATIONS.md` current (OSS libraries, AI tools and what for).
 - Small, clear commits after each working piece. CI on every push: install → lint → typecheck → test + coverage.
@@ -48,7 +51,10 @@ plain-language clues → workshop queue, runaway alerts, and campaigns (fault fa
 | S6 | Fix confirmation (`workshop.repairs.v1`) |
 | S7 | API: JWT roles, RLS, keyset pagination, rate limits, audit, SSE, viewer masking |
 | S8 | Web UI (board, queue, campaign page, vehicle-vs-own-normal chart) + template agent |
-| S9 | Batch + evaluation, throughput + chaos tests, BDD, full CI |
+| S9 | Batch + evaluation, throughput + chaos tests, BDD, full CI (+ ML at-risk classifier, EXPLAIN ANALYZE, Grafana, k6/soak, Pact) |
+| S10 | Deliverables: Helm/K8s, Terraform, STRIDE, diagrams, ADRs, solution doc, video, tag `v1.0-submission` |
+
+Recorded gaps (brief §3): S2 Testcontainers + `/metrics` in every service; S3 Timescale telemetry writer; S7 OIDC + erasure.
 
 ## Repo layout
 ```

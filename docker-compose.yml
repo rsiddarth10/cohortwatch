@@ -1,0 +1,151 @@
+# CohortWatch — one-command local stack.  `docker compose up`   |   clean reset: `docker compose down -v`
+# Every value has a default, so a fresh clone needs no .env. Images are pinned (never `latest`).
+name: cohortwatch
+
+x-pg-env: &pg-env
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cw_postgres_dev}
+
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+      - --smp=2
+      - --memory=2G
+      - --default-log-level=warn
+    ports:
+      - '19092:19092' # Kafka API (host)
+      - '18081:18081' # Schema Registry (host)
+      - '19644:9644' # Admin API
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ['CMD-SHELL', "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_SCHEMAREGISTRY_ENABLED: 'true'
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+    ports:
+      - '8080:8080'
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/admin/health >/dev/null || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  postgres:
+    # TimescaleDB + pgvector image from day one (no switch in S3). Pinned: PG 16.15, TimescaleDB 2.30.1.
+    image: timescale/timescaledb-ha:pg16.15-ts2.30.1
+    environment:
+      <<: *pg-env
+    ports:
+      - '${PG_HOST_PORT:-15432}:5432' # host 15432: 5432 is often taken by a local Postgres
+    volumes:
+      - postgres-data:/home/postgres/pgdata
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U postgres -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  redis:
+    image: redis/redis-stack-server:7.4.0-v1
+    ports:
+      - '${REDIS_HOST_PORT:-16379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  topic-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    entrypoint: ['/bin/sh', '/scripts/topic-init.sh']
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    volumes:
+      - ./infra/kafka/topic-init.sh:/scripts/topic-init.sh:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: 'no'
+
+  db-migrate:
+    image: timescale/timescaledb-ha:pg16.15-ts2.30.1
+    entrypoint: ['/bin/sh', '/scripts/migrate.sh']
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:-cw_postgres_dev}
+      CW_DB: cohortwatch
+      CW_SIM_PASSWORD: ${CW_SIM_PASSWORD:-cw_sim_dev}
+      CW_APP_PASSWORD: ${CW_APP_PASSWORD:-cw_app_dev}
+      MIGRATIONS_DIR: /migrations
+    volumes:
+      - ./infra/db/migrate.sh:/scripts/migrate.sh:ro
+      - ./infra/db/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  simulator:
+    build:
+      context: .
+      dockerfile: services/simulator/Dockerfile
+    image: cohortwatch/simulator:dev
+    environment:
+      SIM_SCALE: ${SIM_SCALE:-100000}
+      SIM_SEED: ${SIM_SEED:-cohortwatch-42}
+      SIM_WORKERS: ${SIM_WORKERS:-4}
+      PLANTS: ${PLANTS:-off}
+      KAFKA_BROKERS: redpanda:9092
+      DATABASE_URL: postgres://cw_sim:${CW_SIM_PASSWORD:-cw_sim_dev}@postgres:5432/cohortwatch
+      METRICS_PORT: 9464
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - '9464:9464' # Prometheus /metrics
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:9464/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    restart: unless-stopped
+
+volumes:
+  redpanda-data:
+  postgres-data:

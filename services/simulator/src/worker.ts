@@ -221,6 +221,11 @@ async function bench(cfg: SimulatorConfig): Promise<void> {
   while (true) {
     const elapsedS = (Date.now() - spec.wallStartMs) / 1000;
     if (elapsedS >= totalS) break;
+    if (elapsedS < 0) {
+      // not started yet: nothing is owed before the common start time
+      await sleep(20);
+      continue;
+    }
     const second = Math.floor(elapsedS);
     if (second !== lastSecond) {
       owed += Math.round(templates.length * multiplierAt(second));

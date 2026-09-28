@@ -40,3 +40,30 @@ describe('simulator CLI arguments', () => {
     expect(parseArgs(['reset'], 'demo').mode).toBe('reset');
   });
 });
+
+describe('sim:watch raw reader', () => {
+  it('reads coolant from all three raw formats in °C', async () => {
+    const { readRaw } = await import('./cli/watch.js');
+    expect(readRaw(JSON.stringify({ id: VIN, ts: 1000, e: 'P', ct: 91.2 }))).toEqual({
+      vin: VIN,
+      ts: 1000,
+      coolantC: 91.2,
+      driving: true,
+    });
+    const v1 = readRaw(
+      JSON.stringify({ vehicle: { vin: VIN }, t: '2026-09-28T04:00:00Z', evt: 'PERIODIC', eng: { coolantTempF: 194 } }),
+    );
+    expect(v1!.coolantC).toBeCloseTo(90, 5);
+    const v2 = readRaw(
+      JSON.stringify({
+        vehicle: { vin: VIN },
+        time: '2026-09-28T04:00:00Z',
+        seqNo: 1,
+        event: 'HEARTBEAT',
+        engine: { coolant: { tempC: null } },
+      }),
+    );
+    expect(v2).toMatchObject({ coolantC: null, driving: false });
+    expect(readRaw('{broken')).toBeNull();
+  });
+});

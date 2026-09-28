@@ -23,6 +23,8 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | `zod` | MIT | Config validation |
 | `yaml` | ISC | Config file parsing |
 | `prom-client` | Apache-2.0 | Prometheus `/metrics` |
+| `@duckdb/node-api` (DuckDB) | MIT | Writing history and ground truth as Parquet; reading it back in `simulator:verify` |
+| `@aws-sdk/client-s3`, `@aws-sdk/lib-storage` | Apache-2.0 | S3-compatible lake uploads (any endpoint) |
 
 ### Development
 
@@ -41,6 +43,8 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | Redpanda Console `v2.7.2` | BSL 1.1 | Topic browser |
 | TimescaleDB HA `pg16.15-ts2.30.1` (PostgreSQL, TimescaleDB, pgvector) | PostgreSQL / Timescale License / PostgreSQL | Relational core, time-series, vectors |
 | Redis Stack Server `7.4.0-v1` | RSALv2 / SSPLv1 | Hot state, dedup, rate limits (from S2) |
+| RustFS `1.0.0` | Apache-2.0 | S3-compatible object store for the Parquet lake |
+| AWS CLI `2.37.4` | Apache-2.0 | One-shot bucket creation (`lake-init`) |
 | Node.js `22.23.3-bookworm-slim` | MIT | Service runtime |
 
 ### CI

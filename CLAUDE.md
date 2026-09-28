@@ -34,6 +34,8 @@ plain-language clues → workshop queue, runaway alerts, and campaigns (fault fa
 - Small, clear commits after each working piece. CI on every push: install → lint → typecheck → test + coverage.
 - `SIM_SCALE` = N vehicles. Dev 5,000; compose default 100,000. Checks use the configured N, never a literal 100,000.
 - Commits go to THIS repo (`CohortWatch/.git`, origin github.com/rsiddarth10/cohortwatch), never the Desktop-level repo.
+- Always ask before deleting anything — files, volumes, topics, data — even if it was proposed earlier.
+  Only explicitly pre-approved deletions are exempt (clearing `bench.raw.v1` after a bench run).
 
 ## Fallbacks (brief §2.3)
 - If `@confluentinc/kafka-javascript` won't install and produce within ~30 min → `kafkajs` for that service + ADR in `docs/adr/`.

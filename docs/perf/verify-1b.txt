@@ -1,0 +1,39 @@
+CohortWatch simulator:verify (step 1b)  2026-09-28T15:30:47.799Z
+N=100000 seed=cohortwatch-42 T0=2026-09-28T04:00:00Z plants=on mess=on live sample=120s
+
+PASS  # 1 vehicle count = N; all VINs valid
+        count=100000 (N=100000), invalid VINs=0
+PASS  # 2 Depot S1 >= 60 S1-model urban vans; S1b >= 30
+        S1=60, S1b=30
+PASS  # 3 plant powertrains (S1/S1b diesel; runaway has a coolant signal)
+        sisters=26 all DIESEL; runaway=DIESEL AX-D1
+PASS  # 4 decoys, heatwave region and runaway do not overlap S1/S1b depots or keys
+        scattered decoys at 6 distinct depots; heatwave region R3; overlaps=0
+PASS  # 5 history ends before the first onset and contains zero plant drift
+        rows=25003472 (manifest 25003472), ends T0-0.0h < first onset T0+6.2h; sisters' last history day identical to plant-free model: yes
+PASS  # 6 urban vans >= 20 readings/sim-day, >= 18 with ignition on
+        per day=36.3, ignition on=30.5 (history, 7 days)
+PASS  # 7 runaway: >= 15 driving readings between "< 12 h to limit" and limit_ts
+        limit_ts=T0+32.7h, driving readings in [limit-12h, limit)=63
+PASS  # 8 S1: >= 20 readings per main sister between onset and the +8 C point
+        min=51, max=101 over 15 main sisters
+PASS  # 9 firmware 4.2.1 split at Depot S1 matches the manifest
+        sisters 16/18 (manifest 16), healthy peers 20/42 = 47.6% (manifest 20)
+PASS  #10 heatwave is hard: >= 30% of the region exceeds the global threshold during it, <= 5% in the equal window before
+        region R3, window 48h. engines (coolant > 97): before 2.0%, during 83.9% (n=5666); EVs (battery > 47): before 0.0%, during 99.3% (n=6845)
+PASS  #11 naturally-hot vans exceed GLOBAL_COOLANT_THRESHOLD_C=97 (>= 50% of driving readings) while other healthy diesel < 1%
+        naturally hot=61.5% (725 vans), other healthy diesel=0.54%
+PASS  #12 mess rates in a 120 s live sample within ±30% of config
+        1289055 messages sampled
+        duplicate: observed 1.864% vs config 2.000% ok
+        malformed: observed 0.097% vs config 0.100% ok
+        invalid_vin: observed 0.050% vs config 0.050% ok
+        unknown_dtc: observed 0.049% vs config 0.050% ok
+        late (seq < max seen, from out-of-order + offline): observed 3.52% (config ooo 5% + offline backlog)
+        generator counters over the same window: out_of_order 4.89%, offline 0.08%, impossible 0.019% (observable on topic 0.017%), skewed vans 0.5% (config 0.5% of vans)
+PASS  #13 same seed => identical first 1,000 messages by (vin, seq), compared by content
+        1000/1000 sampled messages identical to a fresh deterministic model run (48 VINs)
+PASS  #14 cw_app cannot SELECT from schema sim
+        permission denied for schema sim
+
+14/14 checks passed

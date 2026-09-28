@@ -1,0 +1,15 @@
+# Repair demo (done-check 1b #3), N=100,000, demo 360x
+# Repairs published with npm run sim:repair at ~T0+30h for 7KSHM1D80RK100052 (S1 sister) and 7KSHM1D80SK100039 (designated bad repair);
+# 7KSHM1D80SK100008 = unrepaired S1 sister (control). Measured on the raw topics with npm run sim:watch.
+
+watching 7KSHM1D80RK100052, 7KSHM1D80SK100039, 7KSHM1D80SK100008 for 660 s (mean driving coolant per 6 sim-h)
+sim time       7KSHM1D80RK100052   7KSHM1D80SK100039   7KSHM1D80SK100008
+T0+12h                         -        93.0 C (n=3)        93.3 C (n=3)
+T0+24h             96.4 C (n=13)       97.2 C (n=18)       95.6 C (n=16)
+T0+30h             94.1 C (n=26)      100.9 C (n=27)       99.1 C (n=27)
+T0+36h             93.0 C (n=21)      102.0 C (n=18)      100.2 C (n=15)
+T0+48h              90.9 C (n=6)       104.6 C (n=5)       101.4 C (n=5)
+T0+54h             93.4 C (n=10)      108.1 C (n=15)      103.9 C (n=14)
+T0+60h              93.4 C (n=5)      109.1 C (n=16)       105.8 C (n=4)
+T0+72h              91.4 C (n=6)       110.8 C (n=7)       107.1 C (n=9)
+T0+78h              91.4 C (n=3)       112.7 C (n=5)       107.8 C (n=5)

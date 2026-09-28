@@ -81,6 +81,8 @@ services:
     entrypoint: ['/bin/sh', '/scripts/topic-init.sh']
     environment:
       KAFKA_BROKERS: redpanda:9092
+      LAPTOP_RETENTION: ${LAPTOP_RETENTION:-on}
+      KAFKA_PARTITION_BYTES: ${KAFKA_PARTITION_BYTES:-67108864}
     volumes:
       - ./infra/kafka/topic-init.sh:/scripts/topic-init.sh:ro
     depends_on:

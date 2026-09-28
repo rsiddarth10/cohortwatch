@@ -23,3 +23,6 @@ data/
 Thumbs.db
 .idea/
 *.log
+
+# generated columnar data
+*.parquet

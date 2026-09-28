@@ -1,0 +1,18 @@
+{
+  "name": "@cw/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure domain logic: VINs, seeded RNG, registry, trip and signal model, OEM formats. No framework or infrastructure imports.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "pure-rand": "^8.4.2"
+  }
+}

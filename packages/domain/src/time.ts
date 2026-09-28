@@ -22,6 +22,29 @@ export class LiveClock implements Clock {
   }
 }
 
+/**
+ * Scaled simulated clock (step 1b): simulated time starts at `simStartMs` when the wall clock reads
+ * `wallStartMs`, then advances `speed` simulated ms per wall ms. Demo mode uses speed 360
+ * (1 wall-second = 6 sim-minutes). Workers share (simStart, wallStart, speed), so they agree on "now".
+ */
+export class SimClock implements Clock {
+  constructor(
+    readonly simStartMs: number,
+    readonly speed: number,
+    readonly wallStartMs: number = Date.now(),
+    private readonly wallNow: () => number = Date.now,
+  ) {
+    if (!(speed > 0)) throw new Error('clock speed must be > 0');
+  }
+  now(): number {
+    return this.simStartMs + (this.wallNow() - this.wallStartMs) * this.speed;
+  }
+  /** Wall-clock ms at which simulated time `simMs` is reached. */
+  wallAt(simMs: number): number {
+    return this.wallStartMs + (simMs - this.simStartMs) / this.speed;
+  }
+}
+
 /** Deterministic clock for tests. */
 export class ManualClock implements Clock {
   readonly speed = 1;

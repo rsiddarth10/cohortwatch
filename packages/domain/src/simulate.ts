@@ -61,6 +61,18 @@ export interface VehicleState {
   lastOffMs: number;
 }
 
+/** Plant hooks (implemented by scenario.ts). Absent = healthy fleet. */
+export interface ScenarioHooks {
+  ambientDeltaC(regionId: number, t: number): number;
+  cadenceMs(t: number, baseMs: number): number;
+  overrideWindows(v: Vehicle, day: number, dayStart: number, windows: IgnitionWindow[]): IgnitionWindow[];
+  coolantDeltaC(vin: string, t: number, repairAtMs: number | undefined): number;
+  extraDtc(v: Vehicle, w: IgnitionWindow, repairAtMs: number | undefined): { t: number; codes: string[] }[];
+  styleFactor(vin: string, day: number): number;
+  glitchDay(vin: string): number | null;
+  homeDepotId(v: Vehicle, t: number): number;
+}
+
 export interface WorldContext {
   seed: string;
   epochMs: number;
@@ -68,15 +80,21 @@ export interface WorldContext {
   depotsById: Map<number, Depot>;
   /** Memo of daily weather offsets per (region, day); pure cache. */
   weather: Map<string, number>;
+  /** Plants (step 1b). Undefined for a plant-free world (history, PLANTS=off). */
+  scenario?: ScenarioHooks;
+  /** Repairs received so far: VIN -> repaired_at (sim ms). External input, applied from that time on. */
+  repairs: Map<string, number>;
 }
 
-export function makeWorldContext(registry: Registry, params: SimParams): WorldContext {
+export function makeWorldContext(registry: Registry, params: SimParams, scenario?: ScenarioHooks): WorldContext {
   return {
     seed: registry.seed,
     epochMs: registry.epochMs,
     params,
     depotsById: new Map(registry.depots.map((d) => [d.id, d])),
     weather: new Map(),
+    scenario,
+    repairs: new Map(),
   };
 }
 
@@ -101,7 +119,7 @@ export function ambientAt(ctx: WorldContext, region: Region, t: number): number 
   const d = Math.floor(dayF);
   const frac = dayF - d;
   const weather = dayOffset(ctx, region, d) * (1 - frac) + dayOffset(ctx, region, d + 1) * frac;
-  return curve + weather;
+  return curve + weather + (ctx.scenario?.ambientDeltaC(region.id, t) ?? 0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -174,6 +192,8 @@ interface Planned {
   evt: EventType;
   window: number; // index into windows, -1 for parked events
   dtc?: string[];
+  /** Sensor-glitch plant: impossible coolant value reported by this message. */
+  coolantOverrideC?: number;
 }
 
 const ORDER: Record<EventType, number> = {
@@ -226,15 +246,19 @@ export function generateVehicleDay(v: Vehicle, day: number, start: VehicleState,
   const p = ctx.params;
   const model = modelById(v.modelId);
   const duty = dutyById(v.dutyId);
-  const depot = ctx.depotsById.get(v.homeDepotId)!;
+  const sc = ctx.scenario;
+  const d0 = dayStartMs(ctx, day);
+  const d1 = d0 + DAY_MS;
+  const depot = ctx.depotsById.get(sc ? sc.homeDepotId(v, d0) : v.homeDepotId)!;
   const region = regionById(depot.regionId);
   const pt = model.powertrain;
   const hasEngine = pt !== 'EV';
   const hasHvBattery = pt !== 'DIESEL';
-  const d0 = dayStartMs(ctx, day);
-  const d1 = d0 + DAY_MS;
+  const repairAt = ctx.repairs.get(v.vin);
+  const style = v.profile.style * (sc ? sc.styleFactor(v.vin, day) : 1);
 
-  const windows = planDay(v, duty, day, ctx);
+  const planWindows = planDay(v, duty, day, ctx);
+  const windows = sc ? sc.overrideWindows(v, day, d0, planWindows) : planWindows;
   const rng = Rng.of(ctx.seed, v.vin, 'events', day);
 
   // ---- 1. timeline -------------------------------------------------------------------------
@@ -253,11 +277,12 @@ export function generateVehicleDay(v: Vehicle, day: number, start: VehicleState,
     heartbeats(parkedSince, cursor, w.onMs);
     planned.push({ t: w.onMs, evt: 'IGNITION_ON', window: i });
     planned.push({ t: w.onMs + MINUTE_MS, evt: 'TRIP_START', window: i });
-    for (let t = w.onMs + cadenceMs; t < w.offMs - MINUTE_MS; t += cadenceMs) {
+    for (let t = w.onMs + cadenceMs; t < w.offMs - MINUTE_MS;) {
       planned.push({ t, evt: 'PERIODIC', window: i });
+      t += sc ? sc.cadenceMs(t, cadenceMs) : cadenceMs;
     }
     const hours = (w.offMs - w.onMs) / HOUR_MS;
-    const harsh = rng.poisson(duty.harshPerHour * v.profile.style * hours);
+    const harsh = rng.poisson(duty.harshPerHour * style * hours);
     for (let k = 0; k < harsh; k++) {
       const t = Math.round(rng.uniform(w.onMs + 2 * MINUTE_MS, w.offMs - 2 * MINUTE_MS));
       planned.push({ t, evt: rng.chance(0.55) ? 'HARSH_BRAKE' : 'HARSH_ACCEL', window: i });
@@ -278,6 +303,22 @@ export function generateVehicleDay(v: Vehicle, day: number, start: VehicleState,
     const code = rng.pick(FAULT_CODES[family]);
     const t = Math.round(rng.uniform(w.onMs + 2 * MINUTE_MS, w.offMs - 2 * MINUTE_MS));
     planned.push({ t, evt: 'DTC', window: wi, dtc: [code] });
+  }
+
+  if (sc) {
+    // Plant fault codes (own RNG streams, so plant-free vans are untouched).
+    windows.forEach((w, i) => {
+      for (const x of sc.extraDtc(v, w, repairAt)) planned.push({ t: x.t, evt: 'DTC', window: i, dtc: x.codes });
+    });
+    // Sensor glitch: 25 -> 140 -> 25 C within 10 s in the middle of the day's longest drive.
+    if (sc.glitchDay(v.vin) === day && windows.length > 0) {
+      const wi = windows.reduce((b, w, i) => (w.offMs - w.onMs > windows[b]!.offMs - windows[b]!.onMs ? i : b), 0);
+      const w = windows[wi]!;
+      const g = Math.round((w.onMs + w.offMs) / 2) + 7_000;
+      [25, 140, 25].forEach((c, k) =>
+        planned.push({ t: g + k * 5_000, evt: 'PERIODIC', window: wi, coolantOverrideC: c }),
+      );
+    }
   }
 
   planned.sort((a, b) => a.t - b.t || ORDER[a.evt] - ORDER[b.evt]);
@@ -305,6 +346,7 @@ export function generateVehicleDay(v: Vehicle, day: number, start: VehicleState,
     let idleS = 0;
     if (phase === 'DRIVING') {
       speed = clamp(rng.normal(duty.speedKmh, duty.speedSdKmh), 0, duty.maxSpeedKmh);
+      if (style < v.profile.style) speed *= 0.75; // gentle-driving day
       idleS = Math.round(dtH * 3600 * duty.idleFraction);
     } else if (phase === 'WARMUP' || phase === 'COOLDOWN') {
       idleS = Math.round(dtH * 3600);
@@ -373,11 +415,13 @@ export function generateVehicleDay(v: Vehicle, day: number, start: VehicleState,
         v.profile.coolantOffsetC +
         duty.load * cp.dutyLoadC +
         cp.ambientCoef * (ambientBase - 25) +
-        cp.hotAmbientCoef * Math.max(0, ambientBase - cp.hotAmbientThresholdC);
+        cp.hotAmbientCoef * Math.max(0, ambientBase - cp.hotAmbientThresholdC) +
+        (sc ? sc.coolantDeltaC(v.vin, e.t, repairAt) : 0);
       const warm = Math.exp(-(e.t - onMs) / (cp.warmupTauMin * MINUTE_MS));
       const engine = target + (engineStartC - target) * warm;
       if (ignition) {
         coolantC = clamp(engine + rng.normal(0, cp.noiseSdC), -40, 130);
+        if (e.coolantOverrideC !== undefined) coolantC = e.coolantOverrideC;
         rpm = Math.round(phase === 'DRIVING' ? 900 + speed * 22 + rng.normal(0, 60) : 750 + rng.normal(0, 30));
       }
       if (e.evt === 'IGNITION_OFF') {
@@ -452,6 +496,7 @@ export function generateVehicleDay(v: Vehicle, day: number, start: VehicleState,
 export class VehicleStream {
   private day: number;
   private state: VehicleState;
+  private dayStartState: VehicleState;
   private events: SimEvent[] = [];
   private i = 0;
 
@@ -464,6 +509,7 @@ export class VehicleStream {
     let state = initialState(vehicle, ctx);
     for (let d = 0; d < target; d++) state = generateVehicleDay(vehicle, d, state, ctx).end;
     this.state = state;
+    this.dayStartState = state;
     this.day = target - 1;
     this.loadNextDay();
     // Skip events before fromMs: they happened in the simulated past, so they still count in seq.
@@ -472,6 +518,7 @@ export class VehicleStream {
 
   private loadNextDay(): void {
     this.day += 1;
+    this.dayStartState = this.state;
     const r = generateVehicleDay(this.vehicle, this.day, this.state, this.ctx);
     this.events = r.events;
     this.state = r.end;
@@ -492,14 +539,58 @@ export class VehicleStream {
     this.i++;
     return e;
   }
+
+  /** Time of the last emitted event (or -Infinity before the first). */
+  lastEmittedTs(): number {
+    return this.i > 0 ? this.events[this.i - 1]!.eventTs : -Infinity;
+  }
+
+  /**
+   * An external change (a repair) took effect: regenerate the rest of the current day.
+   * The change only affects times after the last emitted event, and plant RNG streams are per hour,
+   * so the already-emitted prefix is identical and seq stays contiguous.
+   */
+  regenerate(): void {
+    const r = generateVehicleDay(this.vehicle, this.day, this.dayStartState, this.ctx);
+    this.events = r.events;
+    this.state = r.end;
+  }
 }
 
 /** Min-heap merge of many vehicle streams by (eventTs, vehicle index). */
 export class FleetStream {
   private readonly heap: VehicleStream[] = [];
+  private readonly byVin = new Map<string, VehicleStream>();
 
-  constructor(vehicles: readonly Vehicle[], ctx: WorldContext, fromMs: number) {
-    for (const v of vehicles) this.push(new VehicleStream(v, ctx, fromMs));
+  constructor(
+    vehicles: readonly Vehicle[],
+    private readonly ctx: WorldContext,
+    fromMs: number,
+  ) {
+    for (const v of vehicles) {
+      const s = new VehicleStream(v, ctx, fromMs);
+      this.byVin.set(v.vin, s);
+      this.push(s);
+    }
+  }
+
+  has(vin: string): boolean {
+    return this.byVin.has(vin);
+  }
+
+  /**
+   * Apply a repair received at sim time `repairedAtMs`. It takes effect no earlier than the vehicle's
+   * last emitted event (we cannot change what was already sent). Returns the effective time.
+   */
+  repair(vin: string, repairedAtMs: number): number | null {
+    const s = this.byVin.get(vin);
+    if (!s) return null;
+    const effective = Math.max(repairedAtMs, s.lastEmittedTs());
+    this.ctx.repairs.set(vin, effective);
+    s.regenerate();
+    // peek time may have changed: restore the heap property
+    for (let i = (this.heap.length >> 1) - 1; i >= 0; i--) this.siftDown(i);
+    return effective;
   }
 
   get size(): number {

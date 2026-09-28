@@ -1,4 +1,4 @@
-/** Tunable model parameters (defaults follow brief §5.1-§5.2). Overridable from config/simulator.yaml. */
+/** Tunable model parameters (defaults follow brief §5.1-§5.8). Overridable from config/simulator.yaml. */
 export interface SimParams {
   /** Days of history before T0 (world starts here; seq counts from here). */
   historyDays: number;
@@ -16,6 +16,8 @@ export interface SimParams {
   chargeRatePctPerH: number;
   coolant: {
     baseC: number;
+    /** Healthy personal offset sd (amended before 1b: 1.5 C). */
+    offsetSdC: number;
     warmupTauMin: number;
     cooldownTauMin: number;
     noiseSdC: number;
@@ -24,7 +26,12 @@ export interface SimParams {
     ambientCoef: number;
     hotAmbientCoef: number;
     hotAmbientThresholdC: number;
+    /** Hard limit used for limit_ts (brief §5.4). */
+    hardLimitC: number;
   };
+  /** Simple global thresholds, used only by checks #10/#11 and the S9 baseline. Detection never uses them. */
+  globalCoolantThresholdC: number;
+  globalBattTempThresholdC: number;
   /** Vehicles per depot target: depots = N / vansPerDepot (brief: ~N/250). */
   vansPerDepot: number;
   /** Reserved depot cohorts (brief §5.1). */
@@ -43,6 +50,7 @@ export const DEFAULT_PARAMS: SimParams = {
   chargeRatePctPerH: 15,
   coolant: {
     baseC: 88,
+    offsetSdC: 1.5,
     warmupTauMin: 6,
     cooldownTauMin: 40,
     noiseSdC: 0.8,
@@ -50,7 +58,10 @@ export const DEFAULT_PARAMS: SimParams = {
     ambientCoef: 0.15,
     hotAmbientCoef: 0.4,
     hotAmbientThresholdC: 35,
+    hardLimitC: 110,
   },
+  globalCoolantThresholdC: 97,
+  globalBattTempThresholdC: 47,
   vansPerDepot: 250,
   s1CohortSize: 60,
   s1OtherModelSize: 10,

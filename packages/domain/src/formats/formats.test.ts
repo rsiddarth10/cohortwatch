@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SimEvent } from '../simulate.js';
-import { AUREX_V1, KESTREL_V1, encodeForOem, toAurexV1, toKestrel } from './index.js';
+import { AUREX_V1, AUREX_V2, KESTREL_V1, encodeForOem, toAurexV1, toAurexV2, toKestrel } from './index.js';
 
 const base: SimEvent = {
   vin: '7KSHM1D84RK100001',
@@ -128,5 +128,24 @@ describe('encodeForOem', () => {
     const a = encodeForOem({ ...base, oemId: 1 });
     expect(a).toMatchObject({ topic: 'raw.oem-a.v1', key: base.vin, format: AUREX_V1 });
     expect(JSON.parse(a.value).vehicle.vin).toBe(base.vin);
+  });
+});
+
+describe('OEM-A Aurex v2 (from T0+12h)', () => {
+  it('uses °C and renamed fields', () => {
+    const v2 = toAurexV2({ ...base, oemId: 1 });
+    expect(v2.seqNo).toBe(88);
+    expect(v2.time).toBe('2026-09-28T10:15:02.120Z');
+    expect(v2.engine.coolant.tempC).toBe(91.4);
+    expect(v2.ambientC).toBe(31.2);
+    expect(v2.position).toEqual({ lat: 14.12346, lon: 74.65432 });
+    expect(v2.battery).toEqual({ tempC: null, socPct: null });
+    expect(v2.software).toBe('4.1.2');
+  });
+
+  it('is chosen by encodeForOem at/after the switch time', () => {
+    const e = { ...base, oemId: 1 };
+    expect(encodeForOem(e, { aurexV2FromMs: e.eventTs }).format).toBe(AUREX_V2);
+    expect(encodeForOem(e, { aurexV2FromMs: e.eventTs + 1 }).format).toBe(AUREX_V1);
   });
 });

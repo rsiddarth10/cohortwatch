@@ -164,7 +164,7 @@ function sizeClass(count: number): Depot['sizeClass'] {
 function makeProfile(seed: string, vin: string, model: VehicleModel, params: SimParams): VehicleProfile {
   const r = Rng.of(seed, vin, 'profile');
   const naturallyHot = model.powertrain === 'DIESEL' && r.chance(params.naturallyHotShare);
-  let coolantOffsetC = r.normal(0, 2);
+  let coolantOffsetC = r.normal(0, params.coolant.offsetSdC);
   if (naturallyHot) coolantOffsetC = Math.abs(coolantOffsetC) * 0.25 + r.uniform(6, 8);
   return {
     coolantOffsetC,

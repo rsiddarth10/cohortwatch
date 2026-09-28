@@ -57,9 +57,11 @@ docker compose up -d
 | `db-migrate` | postgres image | One-shot: applies `infra/db/migrations/*.sql` once each |
 | `simulator` | built from `services/simulator/Dockerfile` | Seeds the registry, streams both OEM formats |
 
-The simulator streams at **1× live time** in step 1a (sim time = wall time), so expect roughly 60–150 msgs/s at
-N = 100,000. That rate is correct for real time: vans report every 30 sim-minutes while driving and every 4 hours
-when parked. The 360× demo clock and the bench mode (~100K msgs/s target) arrive in step 1b.
+The simulator streams at **1× live time** in step 1a (sim time = wall time). Measured at N = 100,000 on the dev
+laptop (i7-1255U, 32 GB, Docker Desktop/WSL2): about **60–70 msgs/s** around midday, when most vans are on shift.
+That is the correct real-time rate: vans report every 30 sim-minutes while driving and every 4 hours when parked.
+First start seeds 100K vehicles by COPY in about 52 s; later starts skip seeding. The 360× demo clock and the bench
+mode (~100K msgs/s target) arrive in step 1b.
 
 ## Useful checks
 

@@ -96,6 +96,7 @@ services remember sequence numbers, so replaying from T0 into an existing stack 
 | `AUTO_REPAIRS` | off | `on` repairs the S1 sisters at ~T0+30 h for unattended demos |
 | `DEPOT_TRANSFER` | off | `on` moves 2 S1 sisters to another depot at T0+30 h |
 | `GLOBAL_COOLANT_THRESHOLD_C` / `GLOBAL_BATT_TEMP_THRESHOLD_C` | 97 / 47 | simple global thresholds, used only by checks #10/#11 and the S9 baseline |
+| `LAPTOP_RETENTION` / `KAFKA_PARTITION_BYTES` | on / 67108864 | laptop disk caps on the high-volume topics (see [Disk](#disk)) |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `LAKE_BUCKET` | RustFS in compose | any S3-compatible store works |
 
 ### Clean reset
@@ -105,6 +106,21 @@ docker compose down -v      # removes containers AND the Postgres, Redpanda and 
 rm -rf data/sim-private     # private ground truth file
 docker compose up -d
 ```
+
+## Disk
+
+A 100K-van demo writes about 22K msgs/s to the raw topics (~9 GB/hour uncapped), so on a laptop Kafka is capped:
+
+- `LAPTOP_RETENTION=on` (default): raw and canonical topics keep 6 h **and** at most `KAFKA_PARTITION_BYTES`
+  (default 64 MiB) per partition, in 16 MiB segments. At demo rate one raw partition holds about **22 wall-minutes**
+  (~460 msgs/s × ~110 B on disk). A consumer that is stopped for longer than that loses the oldest data; fine for
+  local dev, not for production (`LAPTOP_RETENTION=off` = the brief's 3 days).
+- Worst case on disk: (cap + one open segment) × partitions = 80 MiB × 48 raw ≈ **3.8 GB** today, ≈ **7.5 GB** once
+  `telemetry.canonical.v1` fills from S2. `bench.raw.v1` can add up to 3.8 GB during a bench run; the simulator clears
+  it when the run ends, and it keeps only 10 min anyway.
+- Planned: raise `KAFKA_PARTITION_BYTES` to 256–512 MiB once Docker's disk image moves to the larger D: drive.
+- Don't run `npm run history:big` on a laptop (≈1B rows, 20–30 GB in the lake).
+- Change the caps: set the env vars (or `.env`), then `docker compose run --rm topic-init` (applies to existing topics).
 
 ## What runs
 

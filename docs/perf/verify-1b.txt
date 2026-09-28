@@ -1,4 +1,4 @@
-CohortWatch simulator:verify (step 1b)  2026-09-28T15:30:47.799Z
+CohortWatch simulator:verify (step 1b)  2026-09-28T21:14:40.227Z
 N=100000 seed=cohortwatch-42 T0=2026-09-28T04:00:00Z plants=on mess=on live sample=120s
 
 PASS  # 1 vehicle count = N; all VINs valid
@@ -24,15 +24,15 @@ PASS  #10 heatwave is hard: >= 30% of the region exceeds the global threshold du
 PASS  #11 naturally-hot vans exceed GLOBAL_COOLANT_THRESHOLD_C=97 (>= 50% of driving readings) while other healthy diesel < 1%
         naturally hot=61.5% (725 vans), other healthy diesel=0.54%
 PASS  #12 mess rates in a 120 s live sample within ±30% of config
-        1289055 messages sampled
-        duplicate: observed 1.864% vs config 2.000% ok
+        1511815 messages sampled
+        duplicate: observed 1.766% vs config 2.000% ok
         malformed: observed 0.097% vs config 0.100% ok
-        invalid_vin: observed 0.050% vs config 0.050% ok
-        unknown_dtc: observed 0.049% vs config 0.050% ok
-        late (seq < max seen, from out-of-order + offline): observed 3.52% (config ooo 5% + offline backlog)
-        generator counters over the same window: out_of_order 4.89%, offline 0.08%, impossible 0.019% (observable on topic 0.017%), skewed vans 0.5% (config 0.5% of vans)
+        invalid_vin: observed 0.051% vs config 0.050% ok
+        unknown_dtc: observed 0.047% vs config 0.050% ok
+        late (seq < max seen, from out-of-order + offline): observed 2.45% (config ooo 5% + offline backlog)
+        generator counters over the same window: out_of_order 4.93%, offline 0.04%, impossible 0.020% (observable on topic 0.017%), skewed vans 0.5% (config 0.5% of vans)
 PASS  #13 same seed => identical first 1,000 messages by (vin, seq), compared by content
-        1000/1000 sampled messages identical to a fresh deterministic model run (48 VINs)
+        1000/1000 sampled messages identical to a fresh deterministic model run (61 VINs)
 PASS  #14 cw_app cannot SELECT from schema sim
         permission denied for schema sim
 

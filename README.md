@@ -73,7 +73,7 @@ Every choice and timing is in `sim.scenario_manifest`. Ground truth is in `sim.g
 |---|---|
 | `npm run sim:repair -- --vin <VIN>` | Publishes `{vin, repaired_at}` to `workshop.repairs.v1` at the current sim time. The van's drift stops within ~2 sim-hours, except the designated bad-repair sister. |
 | `npm run sim:watch -- --vin <VIN> [--vin <VIN>]` | Follows vans on the raw topics and prints their mean driving coolant per 2 sim-hours (shows a repair working) |
-| `npm run simulator:verify` | Runs the 14 checks of brief §5.8 at the configured N and writes `docs/perf/verify-1b.txt` (needs the demo running for the 2-minute live sample) |
+| `npm run simulator:verify` | Runs the 14 checks of brief §5.8 and writes `docs/perf/verify-1b.txt` (needs the demo running for the 2-minute live sample). It runs on the host, whose config says N=5000: against the compose stack use `SIM_SCALE=100000 npm run simulator:verify`. It refuses to run if N/seed/T0 differ from what the stack was seeded with |
 | `npm run sim:bench` | Stops the demo and runs bench mode: every vehicle every wall-second for 120 s, 8 workers |
 | `npm run sim:bench:burst` | Bench with `--burst`: 60 s at 1×, **5 minutes at 3×**, 60 s at 1× |
 | `npm run sim:reset` | Clears the demo clock, repairs and history; the next start replays from T0 |
@@ -109,16 +109,17 @@ docker compose up -d
 
 ## Disk
 
-A 100K-van demo writes about 22K msgs/s to the raw topics (~9 GB/hour uncapped), so on a laptop Kafka is capped:
+A 100K-van demo writes about 18K msgs/s on average to the raw topics (measured: ~80 B per message on disk after zstd,
+≈ 5 GB/hour uncapped), so on a laptop Kafka is capped:
 
 - `LAPTOP_RETENTION=on` (default): raw and canonical topics keep 6 h **and** at most `KAFKA_PARTITION_BYTES`
   (default 64 MiB) per partition, in 16 MiB segments (closed after 10 min if idle), and Redpanda preallocates 1 MiB
-  per partition instead of 32 MiB (≈ 6.4 GB of empty files across 201 partitions otherwise). At demo rate one raw partition holds about **22 wall-minutes**
-  (~460 msgs/s × ~110 B on disk). A consumer that is stopped for longer than that loses the oldest data; fine for
+  per partition instead of 32 MiB (≈ 6.4 GB of empty files across 201 partitions otherwise). At demo rate one raw partition holds about **36 wall-minutes**
+  (measured: ~384 msgs/s × ~80 B per partition). A consumer that is stopped for longer than that loses the oldest data; fine for
   local dev, not for production (`LAPTOP_RETENTION=off` = the brief's 3 days).
 - Worst case on disk: (cap + one open segment) × partitions = 80 MiB × 48 raw ≈ **3.8 GB** today, ≈ **7.5 GB** once
   `telemetry.canonical.v1` fills from S2. `bench.raw.v1` can add up to 3.8 GB during a bench run; the simulator clears
-  it when the run ends, and it keeps only 10 min anyway.
+  it when the run ends (logically at once; Redpanda frees the files within ~20 min, measured 4.6 GB → 1 MB).
 - Planned: raise `KAFKA_PARTITION_BYTES` to 256–512 MiB once Docker's disk image moves to the larger D: drive.
 - Don't run `npm run history:big` on a laptop (≈1B rows, 20–30 GB in the lake).
 - Change the caps: set the env vars (or `.env`), then `docker compose run --rm topic-init` (applies to existing topics).

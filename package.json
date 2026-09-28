@@ -24,7 +24,8 @@
     "sim:reset": "docker compose stop simulator && docker compose run --rm simulator node services/simulator/dist/main.js reset && docker compose up -d simulator",
     "sim:bench": "docker compose stop simulator && docker compose run --rm -e SIM_WORKERS=8 simulator node services/simulator/dist/main.js bench --duration 120",
     "sim:bench:burst": "docker compose stop simulator && docker compose run --rm -e SIM_WORKERS=8 simulator node services/simulator/dist/main.js bench --burst",
-    "history:big": "docker compose run --rm simulator node services/simulator/dist/main.js history --days 30 --interval-min 2"
+    "history:big": "docker compose run --rm simulator node services/simulator/dist/main.js history --days 30 --interval-min 2",
+    "sim:watch": "tsc -b && node services/simulator/dist/cli/watch.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -61,6 +61,25 @@ export class TelemetryProducer {
   }
 }
 
+/** Delete every record currently in a topic (all partitions, up to the high watermark). Returns the partition count. */
+export async function clearTopic(brokers: string, topic: string): Promise<number> {
+  const kafka = new KafkaJS.Kafka({
+    kafkaJS: { brokers: brokers.split(','), clientId: 'cw-admin', logLevel: KafkaJS.logLevel.WARN },
+  });
+  const admin = kafka.admin();
+  await admin.connect();
+  try {
+    const offsets = await admin.fetchTopicOffsets(topic);
+    await admin.deleteTopicRecords({
+      topic,
+      partitions: offsets.map((o) => ({ partition: o.partition, offset: o.high })),
+    });
+    return offsets.length;
+  } finally {
+    await admin.disconnect();
+  }
+}
+
 /** Consume a topic with a consumer group (at-least-once: offsets commit after the handler resolves). */
 export async function consumeTopic(
   opts: Omit<ProducerOptions, 'lingerMs'> & { groupId: string; fromBeginning: boolean },

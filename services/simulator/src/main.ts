@@ -3,6 +3,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   TelemetryProducer,
+  clearTopic,
   consumeTopic,
   createLogger,
   loadSimulatorConfigFile,
@@ -15,6 +16,7 @@ import { configPath } from './config-path.js';
 import { dtOf, manifestKey, type HistoryManifest, type HistorySpec } from './history.js';
 import {
   BENCH_SPEC_ENV,
+  BENCH_TOPIC,
   HISTORY_SPEC_ENV,
   REPAIRS_ENV,
   SIM_START_ENV,
@@ -395,7 +397,7 @@ async function runBench(cfg: SimulatorConfig, world: World, args: Args, log: Log
     : [{ seconds: args.durationS, multiplier: 1 }];
   const hw = `${os.cpus()[0]?.model ?? 'cpu'} x${os.cpus().length} threads, ${Math.round(os.totalmem() / 2 ** 30)} GiB visible`;
   log.info(
-    { n: world.registry.n, workers: cfg.workers, phases, hardware: hw },
+    { n: world.registry.n, workers: cfg.workers, phases, hardware: hw, topic: BENCH_TOPIC },
     'bench starting (every vehicle every wall-second x multiplier)',
   );
   const wallStartMs = Date.now() + 15_000; // time for workers to build templates and connect
@@ -447,6 +449,9 @@ async function runBench(cfg: SimulatorConfig, world: World, args: Args, log: Log
     },
     'bench result',
   );
+  // bench data has no value after the run; clearing it keeps the laptop disk free (pre-approved deletion)
+  const cleared = await clearTopic(cfg.kafka.brokers, BENCH_TOPIC);
+  log.info({ topic: BENCH_TOPIC, partitions: cleared }, 'bench topic cleared');
 }
 
 // ------------------------------------------------------------------------------------------------

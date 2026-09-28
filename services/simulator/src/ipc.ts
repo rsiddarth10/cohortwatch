@@ -28,6 +28,8 @@ export const SPEED_ENV = 'CW_SPEED';
 export const REPAIRS_ENV = 'CW_REPAIRS';
 export const HISTORY_SPEC_ENV = 'CW_HISTORY_SPEC';
 export const BENCH_SPEC_ENV = 'CW_BENCH_SPEC';
+/** Bench mode writes only here (short retention, cleared after each run) so it never fills the raw topics. */
+export const BENCH_TOPIC = 'bench.raw.v1';
 
 export interface BenchSpec {
   /** Phases in wall seconds with a rate multiplier (1 = every vehicle once per second). */

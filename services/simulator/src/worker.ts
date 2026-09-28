@@ -16,6 +16,7 @@ import { configPath } from './config-path.js';
 import { writeHistoryRange, type HistorySpec } from './history.js';
 import {
   BENCH_SPEC_ENV,
+  BENCH_TOPIC,
   HISTORY_SPEC_ENV,
   REPAIRS_ENV,
   SIM_START_ENV,
@@ -244,7 +245,7 @@ async function bench(cfg: SimulatorConfig): Promise<void> {
       t.seq += 1;
       t.eventTs = now;
       t.odoKm += 0.01;
-      batch.push(encodeForOem(t));
+      batch.push({ ...encodeForOem(t), topic: BENCH_TOPIC });
     }
     const t0 = performance.now();
     owed -= n;

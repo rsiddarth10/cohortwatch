@@ -4,7 +4,9 @@
 # LAPTOP_RETENTION=on (default) caps the high-volume topics so a laptop disk cannot fill:
 #   raw.oem-a.v1, raw.oem-b.v1, telemetry.canonical.v1 -> 6 h, KAFKA_PARTITION_BYTES per partition
 #   bench.raw.v1 (bench mode only)                       -> 10 min, same byte cap
-# segment.bytes is kept small because Redpanda only deletes closed segments.
+# segment.bytes is kept small because Redpanda only deletes closed segments, and segment.ms = 10 min closes idle ones.
+# Configs are passed at create time too: Redpanda applies a changed segment size only from the next segment.
+# Laptop mode also lowers segment_fallocation_step (32 MiB preallocated per partition -> 1 MiB).
 # LAPTOP_RETENTION=off restores the production values (brief §4.1: 3 d, no byte cap).
 # Configs are applied on every run, so changing the env and re-running topic-init updates existing topics.
 set -eu
@@ -13,6 +15,7 @@ RF="${TOPIC_REPLICATION:-1}"
 LAPTOP="${LAPTOP_RETENTION:-on}"
 PART_BYTES="${KAFKA_PARTITION_BYTES:-67108864}" # 64 MiB
 SEGMENT_BYTES=16777216                          # 16 MiB
+SEGMENT_MS=600000                               # 10 min (Redpanda's minimum)
 MIN_MS=60000
 HOUR_MS=3600000
 DAY_MS=86400000
@@ -32,21 +35,26 @@ bench.raw.v1 48 $((10 * MIN_MS)) 1
 "
 
 echo "laptop retention: $LAPTOP (partition cap $PART_BYTES bytes)"
+if [ "$LAPTOP" = on ]; then FALLOC=1048576; else FALLOC=33554432; fi
+rpk cluster config set segment_fallocation_step "$FALLOC" -X brokers="$BROKERS" -X admin.hosts="${ADMIN_HOSTS:-redpanda:9644}" >/dev/null
 echo "$TOPICS" | while read -r name parts retention capped; do
   [ -z "$name" ] && continue
   if [ "$capped" = 1 ] && [ "$LAPTOP" = on ]; then
     [ "$name" = bench.raw.v1 ] || retention=$((6 * HOUR_MS))
-    set_cfg="retention.ms=$retention retention.bytes=$PART_BYTES segment.bytes=$SEGMENT_BYTES"
+    set_cfg="retention.ms=$retention retention.bytes=$PART_BYTES segment.bytes=$SEGMENT_BYTES segment.ms=$SEGMENT_MS"
     del_cfg=""
   else
     set_cfg="retention.ms=$retention"
-    del_cfg="retention.bytes segment.bytes"
+    del_cfg="retention.bytes segment.bytes segment.ms"
   fi
   if rpk topic describe "$name" -X brokers="$BROKERS" >/dev/null 2>&1; then
     echo "exists  $name  ($set_cfg)"
   else
     # tolerate a concurrent creator (TOPIC_ALREADY_EXISTS); fail only if the topic still is not there
-    rpk topic create "$name" -p "$parts" -r "$RF" -c cleanup.policy=delete -X brokers="$BROKERS" ||
+    create_cfg="-c cleanup.policy=delete"
+    for kv in $set_cfg; do create_cfg="$create_cfg -c $kv"; done
+    # shellcheck disable=SC2086 # word splitting of create_cfg is intended
+    rpk topic create "$name" -p "$parts" -r "$RF" $create_cfg -X brokers="$BROKERS" ||
       rpk topic describe "$name" -X brokers="$BROKERS" >/dev/null
   fi
   for kv in $set_cfg; do

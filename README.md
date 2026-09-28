@@ -112,7 +112,8 @@ docker compose up -d
 A 100K-van demo writes about 22K msgs/s to the raw topics (~9 GB/hour uncapped), so on a laptop Kafka is capped:
 
 - `LAPTOP_RETENTION=on` (default): raw and canonical topics keep 6 h **and** at most `KAFKA_PARTITION_BYTES`
-  (default 64 MiB) per partition, in 16 MiB segments. At demo rate one raw partition holds about **22 wall-minutes**
+  (default 64 MiB) per partition, in 16 MiB segments (closed after 10 min if idle), and Redpanda preallocates 1 MiB
+  per partition instead of 32 MiB (≈ 6.4 GB of empty files across 201 partitions otherwise). At demo rate one raw partition holds about **22 wall-minutes**
   (~460 msgs/s × ~110 B on disk). A consumer that is stopped for longer than that loses the oldest data; fine for
   local dev, not for production (`LAPTOP_RETENTION=off` = the brief's 3 days).
 - Worst case on disk: (cap + one open segment) × partitions = 80 MiB × 48 raw ≈ **3.8 GB** today, ≈ **7.5 GB** once

@@ -218,7 +218,8 @@ If a feature does not change **incident, membership or queue rank**, it is out o
 **Amendment (1b, laptop disk caps).** The retention above is the production value and stays so (Helm/K8s, S10).
 The local default is `LAPTOP_RETENTION=on`: `raw.oem-a.v1`, `raw.oem-b.v1`, `telemetry.canonical.v1` and
 `bench.raw.v1` get `retention.ms` = 6 h (bench: 10 min), `retention.bytes` = `KAFKA_PARTITION_BYTES` per partition
-(default 64 MiB) and `segment.bytes` = 16 MiB (Redpanda deletes only closed segments). `LAPTOP_RETENTION=off` restores
+(default 64 MiB), `segment.bytes` = 16 MiB and `segment.ms` = 10 min (Redpanda deletes only closed segments), and the
+cluster's `segment_fallocation_step` drops from 32 MiB to 1 MiB (it preallocates that much per partition, even empty). `LAPTOP_RETENTION=off` restores
 the table above. Bench mode writes only to `bench.raw.v1`, never to the raw topics.
 
 ### 4.2 Database (migrations)

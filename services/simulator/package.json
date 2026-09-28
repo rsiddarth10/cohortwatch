@@ -9,8 +9,11 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1141.0",
+    "@aws-sdk/lib-storage": "^3.1141.0",
     "@cw/common": "0.1.0",
     "@cw/domain": "0.1.0",
+    "@duckdb/node-api": "^1.5.5-r.5",
     "pg": "^8.23.0",
     "pg-copy-streams": "^7.0.0",
     "prom-client": "^15.1.3"

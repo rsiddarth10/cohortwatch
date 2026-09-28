@@ -18,7 +18,13 @@
     "format": "prettier --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "simulator": "npm run build && node services/simulator/dist/main.js"
+    "simulator": "npm run build && node services/simulator/dist/main.js",
+    "simulator:verify": "tsc -b && node services/simulator/dist/cli/verify.js",
+    "sim:repair": "tsc -b && node services/simulator/dist/cli/sim-repair.js",
+    "sim:reset": "docker compose stop simulator && docker compose run --rm simulator node services/simulator/dist/main.js reset && docker compose up -d simulator",
+    "sim:bench": "docker compose stop simulator && docker compose run --rm -e SIM_WORKERS=8 simulator node services/simulator/dist/main.js bench --duration 120",
+    "sim:bench:burst": "docker compose stop simulator && docker compose run --rm -e SIM_WORKERS=8 simulator node services/simulator/dist/main.js bench --burst",
+    "history:big": "docker compose run --rm simulator node services/simulator/dist/main.js history --days 30 --interval-min 2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

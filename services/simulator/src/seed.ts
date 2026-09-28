@@ -31,7 +31,8 @@ interface TableCopy {
 }
 
 /** Every registry table, in foreign-key order. */
-export function registryCopies(reg: Registry): TableCopy[] {
+/** Every registry table, in foreign-key order. Plant firmware releases are excluded (plants-db owns them). */
+export function registryCopies(reg: Registry, excludeReleaseIds: ReadonlySet<number> = new Set()): TableCopy[] {
   return [
     {
       table: 'core.tenant',
@@ -81,7 +82,10 @@ export function registryCopies(reg: Registry): TableCopy[] {
     {
       table: 'core.firmware_release',
       columns: ['id', 'model_id', 'version', 'released_at'],
-      rows: () => reg.firmwareReleases.map((f) => [f.id, f.modelId, f.version, iso(f.releasedAtMs)]),
+      rows: () =>
+        reg.firmwareReleases
+          .filter((f) => !excludeReleaseIds.has(f.id))
+          .map((f) => [f.id, f.modelId, f.version, iso(f.releasedAtMs)]),
     },
     {
       table: 'core.vehicle',
@@ -106,7 +110,9 @@ export function registryCopies(reg: Registry): TableCopy[] {
       table: 'core.vehicle_firmware_history',
       columns: ['vin', 'firmware_id', 'installed_at'],
       rows: function* () {
-        for (const v of reg.vehicles) for (const f of v.firmware) yield [v.vin, f.releaseId, iso(f.installedAtMs)];
+        for (const v of reg.vehicles)
+          for (const f of v.firmware)
+            if (!excludeReleaseIds.has(f.releaseId)) yield [v.vin, f.releaseId, iso(f.installedAtMs)];
       },
     },
     {
@@ -167,26 +173,36 @@ function* csvChunks(rows: Iterable<Cell[]>, rowsPerChunk = 5_000): Generator<str
  * Idempotent registry seeding with COPY, in one transaction.
  * Same (seed, N, T0) already seeded -> skip. Anything else -> replace the registry.
  */
-export async function seedRegistry(client: pg.Client, reg: Registry, log: Logger): Promise<'skipped' | 'seeded'> {
+export async function seedRegistry(
+  client: pg.Client,
+  reg: Registry,
+  registryHash: string,
+  log: Logger,
+  excludeReleaseIds: ReadonlySet<number> = new Set(),
+): Promise<'skipped' | 'seeded'> {
   const t0 = new Date(reg.t0Ms).toISOString();
   await client.query('BEGIN');
   try {
     // One seeder at a time, even if two simulators start together.
     await client.query('SELECT pg_advisory_xact_lock(424242)');
-    const { rows } = await client.query<{ seed: string; n: number; t0: Date }>(
-      'SELECT seed, n, t0 FROM sim.seed_state',
+    const { rows } = await client.query<{ seed: string; n: number; t0: Date; registry_hash: string | null }>(
+      'SELECT seed, n, t0, registry_hash FROM sim.seed_state',
     );
     const current = rows[0];
-    if (current && current.seed === reg.seed && current.n === reg.n && current.t0.toISOString() === t0) {
+    if (current && current.registry_hash === registryHash) {
       await client.query('COMMIT');
       log.info({ seed: reg.seed, n: reg.n }, 'registry already seeded; skipping');
       return 'skipped';
     }
     if (current)
-      log.warn({ from: current, to: { seed: reg.seed, n: reg.n, t0 } }, 'seed/N changed; replacing registry');
+      log.warn({ from: current, to: { seed: reg.seed, n: reg.n, t0 } }, 'seed/N/params changed; replacing registry');
 
     const started = Date.now();
-    const copies = registryCopies(reg);
+    const copies = registryCopies(reg, excludeReleaseIds);
+    // Simulator-private tables that reference the registry go first (plants are re-applied afterwards).
+    for (const t of ['sim.scenario_manifest', 'sim.ground_truth', 'sim.repair_log', 'sim.run_state']) {
+      await client.query(`DELETE FROM ${t}`);
+    }
     // DELETE (not TRUNCATE) in reverse FK order: later-step tables referencing the registry are not ours to truncate.
     for (const c of [...copies].reverse()) await client.query(`DELETE FROM ${c.table}`);
     await client.query('DELETE FROM sim.seed_state');
@@ -198,12 +214,10 @@ export async function seedRegistry(client: pg.Client, reg: Registry, log: Logger
       log.debug({ table: c.table, ms: Date.now() - t }, 'copied');
     }
     const duration = Date.now() - started;
-    await client.query('INSERT INTO sim.seed_state (seed, n, t0, duration_ms) VALUES ($1, $2, $3, $4)', [
-      reg.seed,
-      reg.n,
-      t0,
-      duration,
-    ]);
+    await client.query(
+      'INSERT INTO sim.seed_state (seed, n, t0, duration_ms, registry_hash) VALUES ($1, $2, $3, $4, $5)',
+      [reg.seed, reg.n, t0, duration, registryHash],
+    );
     await client.query('COMMIT');
     log.info(
       { seed: reg.seed, n: reg.n, vehicles: reg.vehicles.length, drivers: reg.drivers.length, ms: duration },

@@ -60,3 +60,23 @@ export class TelemetryProducer {
     await this.producer.disconnect();
   }
 }
+
+/** Consume a topic with a consumer group (at-least-once: offsets commit after the handler resolves). */
+export async function consumeTopic(
+  opts: Omit<ProducerOptions, 'lingerMs'> & { groupId: string; fromBeginning: boolean },
+  topic: string,
+  handler: (key: string | null, value: string | null) => Promise<void>,
+): Promise<{ stop: () => Promise<void> }> {
+  const kafka = new KafkaJS.Kafka({
+    kafkaJS: { brokers: opts.brokers.split(','), clientId: opts.clientId, logLevel: KafkaJS.logLevel.WARN },
+  });
+  const consumer = kafka.consumer({ kafkaJS: { groupId: opts.groupId, fromBeginning: opts.fromBeginning } });
+  await consumer.connect();
+  await consumer.subscribe({ topics: [topic] });
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      await handler(message.key?.toString() ?? null, message.value?.toString() ?? null);
+    },
+  });
+  return { stop: () => consumer.disconnect() };
+}

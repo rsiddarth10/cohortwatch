@@ -13,6 +13,14 @@ metricsPort: 9464
 tickMs: 250
 logLevel: info
 model: { cadenceMin: 30 }
+mode: demo
+speed: 360
+mess: 'on'
+autoRepairs: 'off'
+depotTransfer: 'off'
+simPrivateDir: data/sim-private
+lake: { endpoint: 'http://localhost:19000', region: us-east-1, accessKeyId: a, secretAccessKey: b, bucket: cohortwatch-lake, forcePathStyle: true }
+history: { days: 7, intervalMin: 30 }
 `;
 
 describe('loadSimulatorConfig', () => {
@@ -44,7 +52,20 @@ describe('loadSimulatorConfig', () => {
     expect(() => loadSimulatorConfig(yaml, { SIM_T0: 'yesterday' })).toThrow(/t0/);
   });
 
-  it('refuses PLANTS=on until step 1b', () => {
-    expect(() => loadSimulatorConfig(yaml, { PLANTS: 'on' })).toThrow(/1b/);
+  it('accepts step-1b settings from env (plants, mode, speed, lake, thresholds)', () => {
+    const c = loadSimulatorConfig(yaml, {
+      PLANTS: 'on',
+      SIM_MODE: 'live',
+      SIM_SPEED: '720',
+      AUTO_REPAIRS: 'on',
+      S3_ENDPOINT: 'http://rustfs:9000',
+      LAKE_BUCKET: 'other',
+      GLOBAL_COOLANT_THRESHOLD_C: '98',
+      GLOBAL_BATT_TEMP_THRESHOLD_C: '48',
+    });
+    expect(c).toMatchObject({ plants: 'on', mode: 'live', speed: 720, autoRepairs: 'on' });
+    expect(c.lake).toMatchObject({ endpoint: 'http://rustfs:9000', bucket: 'other', forcePathStyle: true });
+    expect(c.model).toMatchObject({ cadenceMin: 30, globalCoolantThresholdC: 98, globalBattTempThresholdC: 48 });
+    expect(c.history).toEqual({ days: 7, intervalMin: 30 });
   });
 });

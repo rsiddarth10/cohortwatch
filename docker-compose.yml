@@ -107,6 +107,43 @@ services:
         condition: service_healthy
     restart: 'no'
 
+  rustfs:
+    # S3-compatible object store for the Parquet lake (MinIO's public images were withdrawn).
+    image: rustfs/rustfs:1.0.0
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-cohortwatch}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-cohortwatch-dev-secret}
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    ports:
+      - '${S3_HOST_PORT:-19000}:9000' # S3 API
+      - '${S3_CONSOLE_HOST_PORT:-19001}:9001' # web console
+    volumes:
+      - lake-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:9000/health']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  lake-init:
+    # One-shot: create the lake bucket (idempotent).
+    image: amazon/aws-cli:2.37.4
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - >
+        aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket cohortwatch-lake 2>/dev/null
+        && echo 'bucket exists: cohortwatch-lake'
+        || (aws --endpoint-url http://rustfs:9000 s3api create-bucket --bucket cohortwatch-lake
+        && echo 'bucket created: cohortwatch-lake')
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-cohortwatch}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-cohortwatch-dev-secret}
+      AWS_DEFAULT_REGION: us-east-1
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    restart: 'no'
+
   simulator:
     build:
       context: .
@@ -116,14 +153,36 @@ services:
       SIM_SCALE: ${SIM_SCALE:-100000}
       SIM_SEED: ${SIM_SEED:-cohortwatch-42}
       SIM_WORKERS: ${SIM_WORKERS:-4}
-      PLANTS: ${PLANTS:-off}
+      PLANTS: ${PLANTS:-on}
+      SIM_MODE: ${SIM_MODE:-demo}
+      SIM_SPEED: ${SIM_SPEED:-360}
+      MESS: ${MESS:-on}
+      AUTO_REPAIRS: ${AUTO_REPAIRS:-off}
+      DEPOT_TRANSFER: ${DEPOT_TRANSFER:-off}
+      GLOBAL_COOLANT_THRESHOLD_C: ${GLOBAL_COOLANT_THRESHOLD_C:-97}
+      GLOBAL_BATT_TEMP_THRESHOLD_C: ${GLOBAL_BATT_TEMP_THRESHOLD_C:-47}
+      SIM_PRIVATE_DIR: /app/data/sim-private
+      S3_ENDPOINT: http://rustfs:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-cohortwatch}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-cohortwatch-dev-secret}
+      LAKE_BUCKET: cohortwatch-lake
+      S3_FORCE_PATH_STYLE: 'true'
       KAFKA_BROKERS: redpanda:9092
       DATABASE_URL: postgres://cw_sim:${CW_SIM_PASSWORD:-cw_sim_dev}@postgres:5432/cohortwatch
       METRICS_PORT: 9464
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    # Default command: seed -> plants -> history (skipped if present) -> demo stream.
+    command: ['node', 'services/simulator/dist/main.js', 'demo']
     ports:
-      - '9464:9464' # Prometheus /metrics
+      - '9464:9464' # Prometheus /metrics, /healthz, /clock
+    volumes:
+      # Ground truth lives here. NO LEAKS: mount ./data/sim-private ONLY into the simulator
+      # and the evaluation job, never into a detection service (S2-S8).
+      - ./data/sim-private:/app/data/sim-private
     depends_on:
+      lake-init:
+        condition: service_completed_successfully
       topic-init:
         condition: service_completed_successfully
       db-migrate:
@@ -143,9 +202,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 120s
+      start_period: 900s # first boot seeds 100K vans and writes 7 days of history
     restart: unless-stopped
 
 volumes:
   redpanda-data:
   postgres-data:
+  lake-data:

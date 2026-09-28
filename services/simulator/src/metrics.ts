@@ -11,6 +11,10 @@ export class SimMetrics {
   readonly vehicles: Gauge;
   readonly workersReady: Gauge;
   readonly simTime: Gauge;
+  readonly mess: Counter<'kind'>;
+  readonly lag: Gauge;
+  readonly queued: Gauge;
+  readonly repairs: Counter<'outcome'>;
 
   private readonly totals = new Map<string, number>();
   private window: { at: number; totals: Map<string, number> } = { at: Date.now(), totals: new Map() };
@@ -39,6 +43,24 @@ export class SimMetrics {
     this.vehicles = new Gauge({ name: 'cw_sim_vehicles', help: 'Simulated vehicles (configured N)', registers });
     this.workersReady = new Gauge({ name: 'cw_sim_workers_ready', help: 'Worker processes streaming', registers });
     this.simTime = new Gauge({ name: 'cw_sim_clock_seconds', help: 'Current simulated time (epoch s)', registers });
+    this.mess = new Counter({
+      name: 'cw_sim_mess_total',
+      help: 'Messages given each kind of mess (brief 5.5), counted when generated',
+      labelNames: ['kind'],
+      registers,
+    });
+    this.lag = new Gauge({
+      name: 'cw_sim_clock_lag_seconds',
+      help: 'Max wall seconds any worker is behind the simulated clock (0 = keeping up)',
+      registers,
+    });
+    this.queued = new Gauge({ name: 'cw_sim_release_queue', help: 'Messages held for delayed release', registers });
+    this.repairs = new Counter({
+      name: 'cw_sim_repairs_total',
+      help: 'Repairs received on workshop.repairs.v1',
+      labelNames: ['outcome'],
+      registers,
+    });
   }
 
   /** Record acknowledged messages; key is "topic|format". */
@@ -69,7 +91,7 @@ export class SimMetrics {
     return { msgsPerSec: Math.round(rateSum * 10) / 10, total, byStream };
   }
 
-  serve(port: number, isHealthy: () => boolean): Server {
+  serve(port: number, isHealthy: () => boolean, clock: () => object = () => ({})): Server {
     const server = createServer((req, res) => {
       if (req.url === '/metrics') {
         this.registry
@@ -82,6 +104,9 @@ export class SimMetrics {
             res.writeHead(500);
             res.end(String(err));
           });
+      } else if (req.url === '/clock') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(clock()));
       } else if (req.url === '/healthz') {
         const ok = isHealthy();
         res.writeHead(ok ? 200 : 503, { 'content-type': 'text/plain' });

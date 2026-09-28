@@ -27,6 +27,7 @@ COPY --from=build --chown=node:node /app/packages/common/dist packages/common/di
 COPY --from=build --chown=node:node /app/services/simulator/package.json services/simulator/
 COPY --from=build --chown=node:node /app/services/simulator/dist services/simulator/dist
 COPY --from=build --chown=node:node /app/services/simulator/config services/simulator/config
+RUN mkdir -p /app/data/sim-private && chown -R node:node /app/data
 USER node
 EXPOSE 9464
 CMD ["node", "services/simulator/dist/main.js"]

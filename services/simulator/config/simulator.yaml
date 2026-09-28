@@ -5,7 +5,27 @@ scale: 5000 # vehicles; compose sets 100000
 seed: cohortwatch-42
 workers: 4 # processes, each owning a contiguous VIN range; output is identical for any value
 t0: '2026-09-28T04:00:00Z' # start of the live stream = end of history
-plants: 'off' # step 1b
+plants: 'on' # brief 5.4 plants (compose default on)
+mode: demo # demo = 360x from T0 (scenario to T0+72h, then keeps running); live = 1x wall time
+speed: 360
+mess: 'on' # brief 5.5 mess injection on the raw topics
+autoRepairs: 'off' # 'on' publishes repairs for the S1 sisters at ~T0+30h (unattended demo)
+depotTransfer: 'off' # 'on' moves 2 S1 sisters to another depot at T0+30h
+simPrivateDir: data/sim-private # ground truth; mounted ONLY into the simulator and the evaluation job
+
+# S3-compatible lake (RustFS in compose; any S3 endpoint works)
+lake:
+  endpoint: http://localhost:19000
+  region: us-east-1
+  accessKeyId: cohortwatch
+  secretAccessKey: cohortwatch-dev-secret
+  bucket: cohortwatch-lake
+  forcePathStyle: true
+
+# History written before live streaming: `days` before T0 at the normal cadence (intervalMin = cadence).
+history:
+  days: 7
+  intervalMin: 30
 
 kafka:
   brokers: localhost:19092
@@ -27,3 +47,9 @@ model:
   s1CohortSize: 60
   s1OtherModelSize: 10
   s1bCohortSize: 30
+  # Simple global thresholds for checks #10/#11 and the S9 baseline only (detection never uses them)
+  globalCoolantThresholdC: 97
+  globalBattTempThresholdC: 47
+  coolant:
+    offsetSdC: 1.5 # healthy personal offset sd (amended before 1b)
+    hardLimitC: 110

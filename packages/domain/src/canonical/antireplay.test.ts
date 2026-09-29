@@ -128,11 +128,17 @@ describe('compact encoding for Redis', () => {
     expect(() => decodeWindow(new Uint8Array(10))).toThrow();
   });
 
-  it('VIN state (window + last reading): 168 bytes, lossless, nulls preserved', () => {
+  it('VIN state (window + last reading): 169 bytes, lossless, nulls preserved', () => {
     const window = checkReplay(undefined, 7, 70).state;
-    for (const last of [undefined, { seq: 7, odoKm: 1234.5, socPct: null }, { seq: 7, odoKm: null, socPct: 55 }]) {
+    const lasts = [
+      undefined,
+      { seq: 7, odoKm: 1234.5, socPct: null, driving: true },
+      { seq: 7, odoKm: null, socPct: 55, driving: false },
+    ];
+    for (const last of lasts) {
       const bytes = encodeVinState({ window, last });
       expect(bytes).toHaveLength(ENCODED_VIN_STATE_BYTES);
+      expect(ENCODED_VIN_STATE_BYTES).toBe(169);
       expect(decodeVinState(bytes)).toEqual({ window, last });
     }
     // decodes from a view into a larger buffer (as Redis clients hand back)

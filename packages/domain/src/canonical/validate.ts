@@ -98,6 +98,8 @@ export interface LastReading {
   seq: number;
   odoKm: number | null;
   socPct: number | null;
+  /** Whether that reading was taken while driving (ignition on, moving, not charging). */
+  driving: boolean;
 }
 
 /** SoC must rise by more than this (percentage points) while driving to count as impossible. */
@@ -109,6 +111,9 @@ export const ODO_TOLERANCE_KM = 0.01;
  * Compare a reading with the VIN's newest earlier reading. Only readings newer than `prev` are compared
  * (a late reading is older than prev, so a lower odometer is expected). A flagged value is nulled and
  * NOT carried into the next state, so one glitch does not make the following good reading look wrong.
+ *
+ * SoC rising is only impossible between two consecutive driving readings of a van without a running engine
+ * (no coolant signal): a hybrid's engine recharges its battery, and an EV charges while parked between trips.
  */
 export function checkJumps(
   prev: LastReading | undefined,
@@ -121,7 +126,15 @@ export function checkJumps(
     out.quality_flags.push(flag('ODOMETER_BACKWARDS'));
   }
   const driving = out.ignition && !out.charging && (out.speed_kmh ?? 0) > 0;
-  if (driving && prev?.socPct != null && out.soc_pct !== null && out.soc_pct > prev.socPct + SOC_RISE_TOLERANCE_PCT) {
+  const noEngine = out.coolant_c === null;
+  if (
+    driving &&
+    noEngine &&
+    prev?.driving &&
+    prev.socPct !== null &&
+    out.soc_pct !== null &&
+    out.soc_pct > prev.socPct + SOC_RISE_TOLERANCE_PCT
+  ) {
     out.soc_pct = null;
     out.quality_flags.push(flag('SOC_RISING_WHILE_DRIVING'));
   }
@@ -129,6 +142,7 @@ export function checkJumps(
     seq: out.seq,
     odoKm: out.odo_km ?? prev?.odoKm ?? null,
     socPct: out.soc_pct ?? prev?.socPct ?? null,
+    driving,
   };
   return { event: out, next };
 }

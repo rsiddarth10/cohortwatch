@@ -91,7 +91,7 @@ describe('DTC → fault family', () => {
 });
 
 describe('impossible jumps', () => {
-  const prev = { seq: 10, odoKm: 1000, socPct: 60 };
+  const prev = { seq: 10, odoKm: 1000, socPct: 60, driving: true };
 
   it('flags the odometer going backwards, and does not let the glitch become the new normal', () => {
     const r = checkJumps(prev, { ...base, seq: 11, odo_km: 900 });
@@ -104,13 +104,21 @@ describe('impossible jumps', () => {
     expect(r2.next!.odoKm).toBe(1001);
   });
 
-  it('flags SoC rising while driving, but not while charging or parked', () => {
-    expect(checkJumps(prev, { ...base, seq: 11, soc_pct: 75 }).event.quality_flags).toContain(
-      'SOC_RISING_WHILE_DRIVING',
-    );
-    expect(checkJumps(prev, { ...base, seq: 11, soc_pct: 75, charging: true }).event.quality_flags).toEqual([]);
-    expect(checkJumps(prev, { ...base, seq: 11, soc_pct: 75, speed_kmh: 0 }).event.quality_flags).toEqual([]);
-    expect(checkJumps(prev, { ...base, seq: 11, soc_pct: 60.3 }).event.quality_flags).toEqual([]); // rounding
+  it('flags an EV gaining charge between two driving readings', () => {
+    const ev = { ...base, seq: 11, coolant_c: null, soc_pct: 75 }; // no engine: an EV
+    expect(checkJumps(prev, ev).event.quality_flags).toContain('SOC_RISING_WHILE_DRIVING');
+    expect(checkJumps(prev, ev).event.soc_pct).toBeNull();
+    expect(checkJumps(prev, { ...ev, soc_pct: 60.3 }).event.quality_flags).toEqual([]); // rounding
+  });
+
+  it('does not flag charging, parking, a hybrid, or the first drive after charging at the depot', () => {
+    const ev = { ...base, seq: 11, coolant_c: null, soc_pct: 75 };
+    expect(checkJumps(prev, { ...ev, charging: true }).event.quality_flags).toEqual([]);
+    expect(checkJumps(prev, { ...ev, speed_kmh: 0 }).event.quality_flags).toEqual([]);
+    expect(checkJumps(prev, { ...ev, coolant_c: 88 }).event.quality_flags).toEqual([]); // hybrid: engine recharges
+    const parked = { ...prev, driving: false }; // last reading was a heartbeat before an overnight charge
+    expect(checkJumps(parked, ev).event.quality_flags).toEqual([]);
+    expect(checkJumps(parked, ev).next!.driving).toBe(true);
   });
 
   it('does not compare a late (older) reading, and starts clean without history', () => {
@@ -119,12 +127,12 @@ describe('impossible jumps', () => {
     expect(late.next).toBe(prev);
     const first = checkJumps(undefined, { ...base, odo_km: 5 });
     expect(first.event.quality_flags).toEqual([]);
-    expect(first.next).toEqual({ seq: 10, odoKm: 5, socPct: 60 });
+    expect(first.next).toEqual({ seq: 10, odoKm: 5, socPct: 60, driving: true });
   });
 
   it('keeps the previous value when a signal is absent', () => {
     const r = checkJumps(prev, { ...base, seq: 11, soc_pct: null, odo_km: null });
-    expect(r.next).toEqual({ seq: 11, odoKm: 1000, socPct: 60 });
+    expect(r.next).toEqual({ seq: 11, odoKm: 1000, socPct: 60, driving: true });
   });
 });
 

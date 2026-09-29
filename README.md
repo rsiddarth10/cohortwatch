@@ -32,6 +32,15 @@ simulator:
 Restarts are idempotent: the registry, plants and history are skipped when unchanged, and the demo clock resumes
 where it stopped.
 
+**Video preset** (a smooth live demo on a laptop): `SIM_SCALE=30000 SIM_SPEED=360` with the default 3 normaliser
+replicas. That is about 30% of the 100K load. At 100K, 3 replicas keep lag low outside the T0+24–42 h surge, but
+build a backlog during it (peak 3.76M, drained afterwards). At 30K the surge stays within their capacity: expected
+from the measurements, not separately measured. The submission default stays `SIM_SCALE=100000`.
+
+```bash
+docker compose down -v && SIM_SCALE=30000 SIM_SPEED=360 docker compose up -d
+```
+
 | What | Where |
 |---|---|
 | Redpanda Console (topics, live messages) | http://localhost:8080 → Topics → `raw.oem-a.v1` / `raw.oem-b.v1` |
@@ -195,7 +204,7 @@ A 100K-van demo writes about 18K msgs/s on average to the raw topics (measured: 
 | `rustfs` | `rustfs/rustfs:1.0.0` | S3-compatible lake (MinIO's public images were withdrawn) |
 | `topic-init` / `db-migrate` / `lake-init` | redpanda / postgres / `amazon/aws-cli:2.37.4` | One-shot: topics, migrations, lake bucket |
 | `simulator` | built from `services/simulator/Dockerfile` | Seeds, plants, history, demo stream |
-| `normaliser` | built from `services/normaliser/Dockerfile` | S2: raw OEM feeds → validated, de-duplicated canonical events (Avro) + DLQ. Stateless (per-VIN state in Redis): `NORMALISER_REPLICAS=3 docker compose up -d normaliser` scales it, up to 48 (the input partition count). |
+| `normaliser` | built from `services/normaliser/Dockerfile` | S2: raw OEM feeds → validated, de-duplicated canonical events (Avro) + DLQ. Stateless (per-VIN state in Redis). **3 replicas by default**; `NORMALISER_REPLICAS=N docker compose up -d normaliser` scales it, up to 48 (the input partition count). Measured: [docs/perf/normaliser.md](docs/perf/normaliser.md). |
 
 ## Measured (step 1b)
 

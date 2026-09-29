@@ -14,6 +14,8 @@ export default defineConfig({
   test: {
     include: ['packages/*/src/**/*.test.ts', 'services/*/src/**/*.test.ts'],
     environment: 'node',
+    // simulation-heavy tests run in parallel; 5 s was flaky on a loaded laptop
+    testTimeout: 20_000,
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'text', 'html', 'lcov', 'json-summary'],

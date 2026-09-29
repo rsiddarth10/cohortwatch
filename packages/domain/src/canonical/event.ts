@@ -87,20 +87,36 @@ export type CanonicalEvent = z.infer<typeof CanonicalEventSchema>;
 /** Fixed namespace for event ids (a random v4 UUID, generated once for CohortWatch). */
 export const EVENT_ID_NAMESPACE = '6f1c2a4e-3b7d-4e8a-9c51-2d0f8b7a6e13';
 
-const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+const encoder = new TextEncoder();
+const namespaceBytes = new Map<string, Uint8Array>();
+
+function nsBytes(namespace: string): Uint8Array {
+  let b = namespaceBytes.get(namespace);
+  if (!b) {
+    const ns = namespace.replace(/-/g, '');
+    b = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) b[i] = parseInt(ns.slice(i * 2, i * 2 + 2), 16);
+    namespaceBytes.set(namespace, b);
+  }
+  return b;
+}
 
 /** RFC 9562 UUIDv5 (SHA-1, name-based) of `name` in `namespace`. */
 export function uuidV5(namespace: string, name: string): string {
-  const ns = namespace.replace(/-/g, '');
-  const nameBytes = new TextEncoder().encode(name);
+  const nameBytes = encoder.encode(name);
   const input = new Uint8Array(16 + nameBytes.length);
-  for (let i = 0; i < 16; i++) input[i] = parseInt(ns.slice(i * 2, i * 2 + 2), 16);
+  input.set(nsBytes(namespace), 0);
   input.set(nameBytes, 16);
   const h = sha1(input);
   h[6] = (h[6]! & 0x0f) | 0x50; // version 5
   h[8] = (h[8]! & 0x3f) | 0x80; // RFC variant
-  const x = hex(h.subarray(0, 16));
-  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+  let s = '';
+  for (let i = 0; i < 16; i++) {
+    if (i === 4 || i === 6 || i === 8 || i === 10) s += '-';
+    s += HEX[h[i]!];
+  }
+  return s;
 }
 
 /**

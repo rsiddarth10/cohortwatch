@@ -45,12 +45,16 @@ const MIN_MARKER_SHARE = 0.6;
 type Obj = Record<string, unknown>;
 const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x);
 
+const MARKER_LIST = Object.entries(MARKERS) as [SourceFormat, readonly string[]][];
+
 export function detectShape(body: unknown): SourceFormat {
   if (!isObj(body)) throw new DecodeError('UNKNOWN_SHAPE', 'payload is not a JSON object');
   let best: SourceFormat | null = null;
   let bestShare = 0;
-  for (const [fmt, keys] of Object.entries(MARKERS) as [SourceFormat, readonly string[]][]) {
-    const share = keys.filter((k) => k in body).length / keys.length;
+  for (const [fmt, keys] of MARKER_LIST) {
+    let hits = 0;
+    for (const k of keys) if (k in body) hits++;
+    const share = hits / keys.length;
     if (share > bestShare) [best, bestShare] = [fmt, share];
   }
   if (!best || bestShare < MIN_MARKER_SHARE) {
@@ -60,9 +64,13 @@ export function detectShape(body: unknown): SourceFormat {
 }
 
 // Field readers: throw SCHEMA_INVALID naming the path, so the DLQ reason is specific.
+// Paths are split once and cached: these run ~20 times per event on the normaliser's hot path.
+const PATHS = new Map<string, string[]>();
 function get(o: Obj, path: string): unknown {
+  let parts = PATHS.get(path);
+  if (!parts) PATHS.set(path, (parts = path.split('.')));
   let cur: unknown = o;
-  for (const p of path.split('.')) {
+  for (const p of parts) {
     if (!isObj(cur)) return undefined;
     cur = cur[p];
   }

@@ -63,7 +63,8 @@ export class NormaliserMetrics {
     this.e2eSeconds = new Histogram({
       name: 'cw_norm_e2e_seconds',
       help: 'Wall time from x-sent-at (simulator send) to canonical produce ack',
-      buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
+      // fine enough to read p50/p95/p99 by interpolation within a bucket
+      buckets: [0.005, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10, 30, 60],
       registers,
     });
   }

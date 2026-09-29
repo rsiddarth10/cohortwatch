@@ -35,6 +35,8 @@ export interface ReadStates {
 export class StateStore {
   private readonly redis: Redis;
   private sha: string | null = null;
+  /** States that could not be decoded (format change) and were treated as new. */
+  undecodable = 0;
 
   constructor(
     url: string,
@@ -56,7 +58,15 @@ export class StateStore {
     vins.forEach((vin, i) => {
       const v = values[i] ?? null;
       raw.set(vin, v);
-      states.set(vin, v ? decodeVinState(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)) : undefined);
+      let state: VinState | undefined;
+      try {
+        state = v ? decodeVinState(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)) : undefined;
+      } catch {
+        // An older state format (e.g. after an upgrade): start this VIN fresh. The CAS still replaces the old
+        // bytes. Worst case one duplicate is forwarded again, with the same event_id.
+        this.undecodable++;
+      }
+      states.set(vin, state);
     });
     return { states, raw };
   }

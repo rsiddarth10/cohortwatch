@@ -15,6 +15,7 @@ export class NormaliserMetrics {
   readonly qualityFlags: Counter<'type'>;
   readonly casConflicts: Counter;
   readonly pauses: Counter<'reason'>;
+  readonly revokedBatches: Counter;
   readonly paused: Gauge;
   readonly inflight: Gauge;
   readonly redisMs: Gauge;
@@ -39,6 +40,7 @@ export class NormaliserMetrics {
     this.qualityFlags = c('cw_norm_quality_flag_total', 'Quality flags set on canonical events', ['type']);
     this.casConflicts = c('cw_norm_state_cas_conflicts_total', 'VIN states another writer changed first');
     this.pauses = c('cw_norm_pauses_total', 'Times consumption was paused for back-pressure', ['reason']);
+    this.revokedBatches = c('cw_norm_revoked_batches_total', 'Batches not committed because the partition was revoked');
     this.paused = new Gauge({ name: 'cw_norm_paused', help: '1 while consumption is paused', registers });
     this.inflight = new Gauge({ name: 'cw_norm_inflight_events', help: 'Produced, not yet acknowledged', registers });
     this.redisMs = new Gauge({ name: 'cw_norm_redis_ms', help: 'Redis round trip, EWMA (ms)', registers });

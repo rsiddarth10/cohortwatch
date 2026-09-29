@@ -240,8 +240,11 @@ export async function startNormaliser(c: NormaliserConfig, hooks: NormaliserHook
       }));
       const res = await handle(records);
       const last = batch.messages[batch.messages.length - 1]!.offset;
-      if (isStale()) {
-        // partition was revoked mid-batch: the new owner re-reads from the last commit (duplicates dedupe)
+      // The client marks a batch stale on a revoke AND on pause() (our back-pressure). Only a revoke means we
+      // must not commit: the new owner re-reads from the last commit and the window drops what we produced.
+      const owned = consumer.assignment().some((a) => a.topic === batch.topic && a.partition === batch.partition);
+      if (isStale() && !owned) {
+        metrics.revokedBatches.inc();
         log.info({ topic: batch.topic, partition: batch.partition }, 'batch stale after revoke; not committing');
         return;
       }

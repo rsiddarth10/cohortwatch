@@ -231,7 +231,7 @@ services:
     # Stateless (per-VIN state lives in Redis): scale with NORMALISER_REPLICAS, up to the input partition
     # count (48). Each replica gets its own host port from the range for /metrics.
     deploy:
-      replicas: ${NORMALISER_REPLICAS:-1}
+      replicas: ${NORMALISER_REPLICAS:-3}
     ports:
       - '9465-9468:9465' # Prometheus /metrics, /healthz, /ledger
     # NO data/sim-private mount: detection services never see ground truth.

@@ -6,7 +6,7 @@ import { dtcAdd, dtcCount24, dtcThreshold, type DtcRing } from './dtc.js';
 import { emptyTrend, ewUpdate, trendFitNow, trendMean, trendSlope, trendWeight, type EwTrend } from './ewtrend.js';
 import { kofnConfirmed, kofnPush } from './kofn.js';
 import { METRICS, METRIC_FAMILY, type DetectParams, type Family, type Metric } from './params.js';
-import type { PeerContext } from './peer.js';
+import type { PeerContext, PeerScope } from './peer.js';
 import { robustZ } from './robust.js';
 import { hoursToLimit, runawayRun } from './ttl.js';
 
@@ -68,8 +68,11 @@ export interface StepEnv {
   params: DetectParams;
   baseline: VanBaseline | undefined;
   peers: PeerContext;
-  /** Peer-context key for this van and metric (region × duty × metric); null = no peer adjustment. */
-  peerKey(metric: Metric): string | null;
+  /**
+   * Peer contexts for this van and metric, most specific first (e.g. region × duty, then region). The first
+   * with at least minPeers recent peers is used; the van feeds all of them. Empty = no peer adjustment.
+   */
+  peerKeys(metric: Metric): readonly PeerScope[];
 }
 
 // ---- state ----------------------------------------------------------------------------------------
@@ -310,9 +313,18 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
     const dev = level - base.median;
     const slope = trendSlope(ms.slow);
     const devSlope = slope === null ? 0 : slope - base.slopeMedian;
-    const key = env.peerKey(metric);
-    const ctx = key ? env.peers.centre(key, ev.ts) : { level: 0, slope: 0, peers: 0 };
-    if (key) env.peers.update(key, ev.vin, dev, devSlope, ev.ts);
+    const scopes = env.peerKeys(metric);
+    let ctx = { level: 0, slope: 0, peers: 0 };
+    let scope = '';
+    for (const s of scopes) {
+      const c = env.peers.centre(s.key, ev.ts);
+      if (c.peers > 0) {
+        ctx = c;
+        scope = s.label;
+        break;
+      }
+    }
+    for (const s of scopes) env.peers.update(s.key, ev.vin, dev, devSlope, ev.ts);
     const zL = mp.direction * robustZ(dev - ctx.level, base.mad, mp.minMad);
     const zS = slope === null ? 0 : mp.direction * robustZ(devSlope - ctx.slope, base.slopeMad, mp.minSlopeMad);
     const abnormal = zL >= p.zLevel || (zS >= p.zSlope && zL >= p.zLevelWithSlope);
@@ -364,6 +376,7 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
           zSlope: zS,
           peerLevel: ctx.level,
           peers: ctx.peers,
+          peerScope: scope,
           hoursToLimit: ttl,
           runaway: inc.critical,
         }),

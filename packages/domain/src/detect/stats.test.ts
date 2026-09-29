@@ -3,7 +3,7 @@ import { HOUR_MS } from '../time.js';
 import { dtcAdd, dtcCount24, dtcThreshold } from './dtc.js';
 import { emptyTrend, ewUpdate, trendFitNow, trendMean, trendSlope, trendWeight, type EwTrend } from './ewtrend.js';
 import { kofnConfirmed, kofnCount, kofnPush } from './kofn.js';
-import { PeerContext, peerKey } from './peer.js';
+import { PeerContext, peerScopes } from './peer.js';
 import { mad, median, robustZ } from './robust.js';
 import { hoursToLimit, runawayRun } from './ttl.js';
 
@@ -134,7 +134,7 @@ describe('DTC 24-h ring', () => {
 describe('peer context', () => {
   it('a shared +10 °C shift across peers gives ≈ 0 adjusted deviation', () => {
     const peers = new PeerContext(2, 10);
-    const key = peerKey(3, 1, 'coolant_c');
+    const key = peerScopes(3, 1, 'coolant_c')[0]!.key;
     const devs = Array.from({ length: 50 }, (_, i) => 10 + Math.sin(i) * 0.5); // every van +10 °C (heatwave)
     devs.forEach((d, i) => peers.update(key, `VIN${i}`, d, 0, T0));
     const c = peers.centre(key, T0);

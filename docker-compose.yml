@@ -291,6 +291,57 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  state-processor:
+    build:
+      context: .
+      dockerfile: services/state-processor/Dockerfile
+    image: cohortwatch/state-processor:dev
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      REDIS_URL: redis://redis:6379
+      # cw_app: detection has no access to schema sim (ground truth)
+      DATABASE_URL: postgres://cw_app:${CW_APP_PASSWORD:-cw_app_dev}@postgres:5432/cohortwatch
+      GROUP_ID: ${STATE_GROUP_ID:-cg.state}
+      STATE_PREFIX: ${STATE_PREFIX:-sp}
+      ENCODING: ${NORMALISER_ENCODING:-avro}
+      CHECKPOINT_MS: ${STATE_CHECKPOINT_MS:-10000}
+      TELEMETRY: ${TELEMETRY:-on}
+      TELEMETRY_BUCKET_MIN: ${TELEMETRY_BUCKET_MIN:-60}
+      GLOBAL_COOLANT_THRESHOLD_C: ${GLOBAL_COOLANT_THRESHOLD_C:-97}
+      GLOBAL_BATT_TEMP_THRESHOLD_C: ${GLOBAL_BATT_TEMP_THRESHOLD_C:-47}
+      METRICS_PORT: 9466
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    # Per-VIN state is in memory per owned partition, checkpointed to Redis (ADR 0005): scale with
+    # STATE_REPLICAS, up to the 48 input partitions.
+    deploy:
+      replicas: ${STATE_REPLICAS:-3}
+    ports:
+      - '9470-9473:9466' # Prometheus /metrics, /healthz, /stats
+    # NO data/sim-private mount: detection services never see ground truth.
+    depends_on:
+      baselines:
+        condition: service_completed_successfully
+      topic-init:
+        condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:9466/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
 volumes:
   redpanda-data:
   postgres-data:

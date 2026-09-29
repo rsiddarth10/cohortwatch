@@ -87,4 +87,14 @@ export class PeerContext {
   }
 }
 
-export const peerKey = (regionId: number, dutyId: number, metric: string): string => `${regionId}|${dutyId}|${metric}`;
+export interface PeerScope {
+  key: string;
+  /** For clues: "in the same region and duty". */
+  label: string;
+}
+
+/** Peer contexts of a van, most specific first: region × duty, then the whole region (all duties). */
+export const peerScopes = (regionId: number, dutyId: number, metric: string): PeerScope[] => [
+  { key: `${regionId}|${dutyId}|${metric}`, label: 'in the same region and duty' },
+  { key: `${regionId}|*|${metric}`, label: 'in the same region' },
+];

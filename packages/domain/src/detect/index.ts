@@ -7,3 +7,4 @@ export * from './peer.js';
 export * from './robust.js';
 export * from './ttl.js';
 export * from './vanstate.js';
+export * from './message.js';

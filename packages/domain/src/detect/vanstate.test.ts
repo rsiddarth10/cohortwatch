@@ -67,7 +67,12 @@ function env(
   peers = new PeerContext(P.peerWindowH, P.minPeers),
   key: string | null = null,
 ): StepEnv {
-  return { params: P, baseline, peers, peerKey: (m: Metric) => (key ? `${key}|${m}` : null) };
+  return {
+    params: P,
+    baseline,
+    peers,
+    peerKeys: (m: Metric) => (key ? [{ key: `${key}|${m}`, label: 'in the same region and duty' }] : []),
+  };
 }
 
 /** Drive one van continuously, a reading every 30 sim-min, coolant = f(hours since T0). */

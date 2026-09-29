@@ -27,6 +27,8 @@ export interface SignalClueInput {
   /** Peer centre (unit) and how many peers it came from (0 = no adjustment). */
   peerLevel: number;
   peers: number;
+  /** Which peers, e.g. "in the same region and duty". */
+  peerScope: string;
   hoursToLimit: number | null;
   runaway: boolean;
 }
@@ -66,8 +68,8 @@ export function signalClues(i: SignalClueInput): Clue[] {
   if (i.peers > 0) {
     const text =
       Math.abs(i.peerLevel) < 1.5 * p.minMad
-        ? `peers in the same region and duty are normal right now (${signed(i.peerLevel)} ${p.unit}, ${i.peers} vans)`
-        : `peers in the same region and duty are ${signed(i.peerLevel)} ${p.unit} vs their own normal right now; this van is compared after removing that (${i.peers} vans)`;
+        ? `peers ${i.peerScope} are normal right now (${signed(i.peerLevel)} ${p.unit}, ${i.peers} vans)`
+        : `peers ${i.peerScope} are ${signed(i.peerLevel)} ${p.unit} vs their own normal right now; this van is compared after removing that (${i.peers} vans)`;
     clues.push({ type: 'PEERS', text, value: i.peerLevel, unit: p.unit });
   }
   if (i.hoursToLimit !== null && p.hardLimit !== null) {

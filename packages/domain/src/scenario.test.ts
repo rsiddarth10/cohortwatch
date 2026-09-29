@@ -225,6 +225,17 @@ describe('ground truth', () => {
     expect(gt.some((r) => r.role === 'heatwave_region')).toBe(true);
     expect(gt.filter((r) => r.role === 'background').length).toBeGreaterThan(reg.n / 2);
   });
+
+  it('heatwave vans carry scenario "heatwave" with the heatwave start as onset (no fault family)', () => {
+    const heat = buildGroundTruth(reg, P, sc).filter((r) => r.role === 'heatwave_region');
+    expect(heat.length).toBeGreaterThan(0);
+    for (const r of heat) {
+      expect(r.scenarioId).toBe('heatwave');
+      expect(r.onsetTs).toBe(sc.heatwave!.fromMs);
+      expect(r.faultFamily).toBeNull();
+      expect(r.expectedCampaign).toBeNull();
+    }
+  });
 });
 
 describe('SimClock', () => {

@@ -59,12 +59,15 @@ export function buildGroundTruth(
   const regionOf = new Map(reg.depots.map((d) => [d.id, d.regionId]));
   return reg.vehicles.map((v) => {
     const p = scenario.plants.get(v.vin);
+    const role = roleOf(v, scenario, (id) => regionOf.get(id)!);
+    // Heatwave vans are not faulty: the scenario is the region's weather, starting when the heatwave does.
+    const heat = role === 'heatwave_region' && scenario.heatwave ? scenario.heatwave : null;
     return {
       vin: v.vin,
-      scenarioId: p?.scenarioId ?? null,
-      role: roleOf(v, scenario, (id) => regionOf.get(id)!),
+      scenarioId: p?.scenarioId ?? (heat ? 'heatwave' : null),
+      role,
       faultFamily: p?.faultFamily ?? null,
-      onsetTs: p?.drift?.onsetMs ?? null,
+      onsetTs: p?.drift?.onsetMs ?? heat?.fromMs ?? null,
       late: p?.late ?? false,
       limitTs: p?.drift ? computeLimitTs(reg, params, scenario, v.vin, horizonMs) : null,
       expectedCampaign: p?.expectedCampaign ?? null,

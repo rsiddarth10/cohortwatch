@@ -1,0 +1,24 @@
+{
+  "name": "@cw/normaliser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "S2 normaliser: raw OEM topics -> validated, de-duplicated canonical events (Avro) + DLQ.",
+  "main": "./dist/main.js",
+  "scripts": {
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@cw/common": "0.1.0",
+    "@cw/domain": "0.1.0",
+    "@kafkajs/confluent-schema-registry": "^4.1.0",
+    "avsc": "^5.7.9",
+    "ioredis": "^6.0.0",
+    "prom-client": "^15.1.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@testcontainers/redpanda": "^12.2.0",
+    "testcontainers": "^12.2.0"
+  }
+}

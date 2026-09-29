@@ -208,6 +208,53 @@ services:
       start_period: 900s # first boot seeds 100K vans and writes 7 days of history
     restart: unless-stopped
 
+  normaliser:
+    build:
+      context: .
+      dockerfile: services/normaliser/Dockerfile
+    image: cohortwatch/normaliser:dev
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      REDIS_URL: redis://redis:6379
+      INPUT_TOPICS: ${NORMALISER_INPUT_TOPICS:-raw.oem-a.v1,raw.oem-b.v1}
+      OUTPUT_TOPIC: ${NORMALISER_OUTPUT_TOPIC:-telemetry.canonical.v1}
+      GROUP_ID: ${NORMALISER_GROUP_ID:-cg.normaliser}
+      ENCODING: ${NORMALISER_ENCODING:-avro}
+      # event-time ms per wall ms, for the clock-skew check: the simulator's demo speed (set 1 for SIM_MODE=live)
+      INGEST_CLOCK_SPEED: ${NORMALISER_CLOCK_SPEED:-360}
+      BATCH_SIZE: ${NORMALISER_BATCH_SIZE:-2000}
+      CONCURRENCY: ${NORMALISER_CONCURRENCY:-8}
+      METRICS_PORT: 9465
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    # Stateless (per-VIN state lives in Redis): scale with NORMALISER_REPLICAS, up to the input partition
+    # count (48). Each replica gets its own host port from the range for /metrics.
+    deploy:
+      replicas: ${NORMALISER_REPLICAS:-1}
+    ports:
+      - '9465-9468:9465' # Prometheus /metrics, /healthz, /ledger
+    # NO data/sim-private mount: detection services never see ground truth.
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:9465/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
 volumes:
   redpanda-data:
   postgres-data:

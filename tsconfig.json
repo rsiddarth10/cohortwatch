@@ -1,4 +1,17 @@
 {
   "files": [],
-  "references": [{ "path": "packages/domain" }, { "path": "packages/common" }, { "path": "services/simulator" }]
+  "references": [
+    {
+      "path": "packages/domain"
+    },
+    {
+      "path": "packages/common"
+    },
+    {
+      "path": "services/simulator"
+    },
+    {
+      "path": "services/normaliser"
+    }
+  ]
 }

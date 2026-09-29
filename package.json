@@ -9,7 +9,8 @@
   "workspaces": [
     "packages/domain",
     "packages/common",
-    "services/simulator"
+    "services/simulator",
+    "services/normaliser"
   ],
   "scripts": {
     "build": "tsc -b",
@@ -25,7 +26,9 @@
     "sim:bench": "docker compose stop simulator && docker compose run --rm -e SIM_WORKERS=8 simulator node services/simulator/dist/main.js bench --duration 120",
     "sim:bench:burst": "docker compose stop simulator && docker compose run --rm -e SIM_WORKERS=8 simulator node services/simulator/dist/main.js bench --burst",
     "history:big": "docker compose run --rm simulator node services/simulator/dist/main.js history --days 30 --interval-min 2",
-    "sim:watch": "tsc -b && node services/simulator/dist/cli/watch.js"
+    "sim:watch": "tsc -b && node services/simulator/dist/cli/watch.js",
+    "normaliser:reconcile": "tsc -b && node services/normaliser/dist/cli/reconcile.js",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

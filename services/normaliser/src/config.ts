@@ -24,8 +24,11 @@ export const NormaliserConfigSchema = z.object({
   CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
   /** Pause consumption when more produced-but-unacknowledged events are in flight than this. */
   MAX_INFLIGHT_EVENTS: z.coerce.number().int().min(1).default(50_000),
-  /** Pause consumption when the Redis round trip (EWMA) exceeds this. */
-  MAX_REDIS_MS: z.coerce.number().positive().default(250),
+  /**
+   * Pause consumption when the Redis round trip (EWMA) exceeds this. Measured from Node, so it includes
+   * event-loop delay: it also backs off when the process itself is starved of CPU.
+   */
+  MAX_REDIS_MS: z.coerce.number().positive().default(1000),
   /** Event-time ms per ingest (wall) ms: 1 in production, the simulator's speed (e.g. 360) in demo. */
   INGEST_CLOCK_SPEED: z.coerce.number().positive().default(1),
   /** CLOCK_SKEW when event time is this far ahead of the time its ingest implies. */

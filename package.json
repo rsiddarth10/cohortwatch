@@ -28,7 +28,8 @@
     "history:big": "docker compose run --rm simulator node services/simulator/dist/main.js history --days 30 --interval-min 2",
     "sim:watch": "tsc -b && node services/simulator/dist/cli/watch.js",
     "normaliser:reconcile": "tsc -b && node services/normaliser/dist/cli/reconcile.js",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "normaliser:bench-cpu": "tsc -b && node services/normaliser/dist/cli/bench-cpu.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

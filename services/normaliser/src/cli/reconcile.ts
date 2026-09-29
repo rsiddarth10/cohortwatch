@@ -30,6 +30,7 @@ const ledgerUrls = arg('ledger', process.env.NORMALISER_LEDGER_URLS ?? 'http://l
 const brokers = arg('brokers', process.env.KAFKA_BROKERS ?? 'localhost:19092');
 const outTopic = arg('out', 'telemetry.canonical.v1');
 const dlqTopic = arg('dlq', 'telemetry.dlq.v1');
+const readTimeoutS = Number(arg('read-timeout', '1800'));
 
 async function snapshot(): Promise<{ committed: Map<string, bigint>; duplicates: number; at: number }> {
   const committed = new Map<string, bigint>();
@@ -69,47 +70,59 @@ async function countBySource(
   const seen = new Set<string>();
   const done = new Set<number>();
   const consumer = kafka.consumer({
+    'js.consumer.max.batch.size': 5000,
     kafkaJS: { groupId: `cw-reconcile-${Date.now()}`, fromBeginning: true, autoCommit: false },
   });
   await consumer.connect();
   await consumer.subscribe({ topics: [topic] });
   let resolveAll: () => void;
   const finished = new Promise<void>((r) => (resolveAll = r));
-  const timer = setTimeout(() => resolveAll(), 10 * 60_000);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    resolveAll();
+  }, readTimeoutS * 1000);
+  const onMessage = (partition: number, message: KafkaJS.KafkaMessage) => {
+    const start = startBy.get(partition);
+    if (start === undefined) return; // nothing in the window on this partition
+    const offset = BigInt(message.offset);
+    if (offset < start) {
+      // partitions are assigned asynchronously, so seek on first sight rather than up front
+      if (!seeked.has(partition)) {
+        seeked.add(partition);
+        consumer.seek({ topic, partition, offset: start.toString() });
+      }
+      return;
+    }
+    const end = endBy.get(partition) ?? 0n;
+    if (offset >= end - 1n) done.add(partition);
+    const h = message.headers ?? {};
+    const val = (k: string) => {
+      const v = h[k];
+      return (Array.isArray(v) ? v[0] : v)?.toString();
+    };
+    const src = `${val('x-src-topic')}:${val('x-src-partition')}`;
+    const r = ranges.get(src);
+    if (r) {
+      const off = BigInt(val('x-src-offset') ?? '-1');
+      if (off >= r[0] && off < r[1]) seen.add(`${src}:${off}`);
+    }
+    if (done.size >= todo.length) resolveAll();
+  };
   await consumer.run({
-    eachMessage: async ({ partition, message }) => {
-      const start = startBy.get(partition);
-      if (start === undefined) return; // nothing in the window on this partition
-      const offset = BigInt(message.offset);
-      if (offset < start) {
-        // partitions are assigned asynchronously, so seek on first sight rather than up front
-        if (!seeked.has(partition)) {
-          seeked.add(partition);
-          consumer.seek({ topic, partition, offset: start.toString() });
-        }
-        return;
-      }
-      const end = endBy.get(partition) ?? 0n;
-      if (offset >= end - 1n) done.add(partition);
-      const h = message.headers ?? {};
-      const val = (k: string) => {
-        const v = h[k];
-        return (Array.isArray(v) ? v[0] : v)?.toString();
-      };
-      const src = `${val('x-src-topic')}:${val('x-src-partition')}`;
-      const r = ranges.get(src);
-      if (r) {
-        const off = BigInt(val('x-src-offset') ?? '-1');
-        if (off >= r[0] && off < r[1]) seen.add(`${src}:${off}`);
-      }
-      if (done.size >= todo.length) resolveAll();
+    eachBatch: async ({ batch }) => {
+      for (const m of batch.messages) onMessage(batch.partition, m);
     },
   });
   await finished;
   clearTimeout(timer);
   await consumer.disconnect();
+  if (timedOut)
+    throw new Incomplete(`${topic}: read timed out after ${readTimeoutS} s (${done.size}/${todo.length} partitions)`);
   return seen.size;
 }
+
+class Incomplete extends Error {}
 
 async function main(): Promise<void> {
   const kafka = new KafkaJS.Kafka({
@@ -147,6 +160,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(err);
+  // A read that did not finish is not a verdict: say so instead of reporting a false imbalance.
+  if (err instanceof Incomplete) console.log(`INCOMPLETE: ${err.message}`);
+  else console.error(err);
   process.exit(2);
 });

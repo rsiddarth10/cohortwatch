@@ -49,6 +49,59 @@ where it stopped.
 - **Mess (on purpose):** duplicates (same VIN + seq twice), out-of-order and late messages, truncated or incomplete
   JSON, invalid VINs, unparseable fault codes, impossible values, ±90 s clock skew on 0.5% of vans.
 
+## Viewing the data
+
+Start the stack first (`docker compose up -d`). Everything below is local and synthetic; the passwords are
+development defaults.
+
+| What | URL / address | Login |
+|---|---|---|
+| **Redpanda Console**: topics, live messages, headers, consumer groups, schema registry | http://localhost:8080 | none |
+| **Postgres**: registry, depots, ground truth | host `localhost`, port `15432`, database `cohortwatch` | `postgres` / `cw_postgres_dev` (admin), or `cw_app` / `cw_app_dev` (the detection role: cannot read schema `sim`) |
+| **RustFS console**: the Parquet lake | http://localhost:19001 → bucket `cohortwatch-lake` → `history/` | `cohortwatch` / `cohortwatch-dev-secret` |
+| **S3 API** (DuckDB, AWS CLI) | http://localhost:19000, path-style, region `us-east-1` | same keys |
+| **Simulator** metrics / health / clock | http://localhost:9464/metrics · `/healthz` · `/clock` | none |
+| **Normaliser** metrics / health / ledger | http://localhost:9465/metrics · `/healthz` · `/ledger` (if the port is taken on recreate, compose picks 9466–9468: `docker compose port normaliser 9465`) | none |
+| **Kafka API** from the host | `localhost:19092`; schema registry `http://localhost:18081` | none |
+
+**In the Console:** `raw.oem-a.v1` / `raw.oem-b.v1` are the messy OEM feeds, and `telemetry.canonical.v1` holds the
+clean events. They are Avro, and the Console decodes them through the schema registry (subject
+`telemetry.canonical.v1-value`). `telemetry.dlq.v1` holds the rejects, with `error_code`, `error_detail` and the
+original payload in base64. Each canonical and DLQ record carries `x-src-topic` / `x-src-partition` /
+`x-src-offset` pointing back to its raw record.
+
+**DBeaver:** New connection → PostgreSQL → Host `localhost`, Port `15432`, Database `cohortwatch`, Username
+`postgres`, Password `cw_postgres_dev` → Test Connection. Schemas `core` (the fleet) and `sim` (simulator-private
+answer key).
+
+```sql
+-- 1. The fleet by model and powertrain
+SELECT m.code AS model, m.powertrain, count(*) AS vans
+FROM core.vehicle v JOIN core.vehicle_model m ON m.id = v.model_id
+GROUP BY 1, 2 ORDER BY 3 DESC;
+
+-- 2. Largest depots today (D-001 and D-005 hold the S1 and S1b outbreaks)
+SELECT d.code AS depot, count(*) AS vans
+FROM core.vehicle_depot_assignment a JOIN core.depot d ON d.id = a.depot_id
+WHERE upper_inf(a.valid)
+GROUP BY 1 ORDER BY 2 DESC LIMIT 10;
+
+-- 3. What was planted (the answer key; only the postgres/cw_sim roles can read it)
+SELECT scenario_id, role, count(*) AS vans, min(onset_ts) AS first_onset
+FROM sim.ground_truth WHERE scenario_id IS NOT NULL
+GROUP BY 1, 2 ORDER BY 1, 2;
+```
+
+**History Parquet with DuckDB** (DuckDB CLI, e.g. `winget install DuckDB.cli`):
+
+```sql
+INSTALL httpfs; LOAD httpfs;
+CREATE SECRET lake (TYPE s3, KEY_ID 'cohortwatch', SECRET 'cohortwatch-dev-secret',
+                    ENDPOINT 'localhost:19000', URL_STYLE 'path', USE_SSL false, REGION 'us-east-1');
+SELECT count(*) AS rows, min(event_ts) AS first, max(event_ts) AS last, count(DISTINCT vin) AS vans
+FROM read_parquet('s3://cohortwatch-lake/history/*/*.parquet');
+```
+
 ## Scenario (brief §5.4)
 
 | Plant | What happens |
@@ -57,7 +110,7 @@ where it stopped.
 | S1b | 8 vans of the same model/duty at `D-005` (another region), onset T0+18 h |
 | Runaway | 1 Aurex linehaul van, driving continuously T0+10 h → T0+34 h, accelerating to 110 °C |
 | Decoys | 6 scattered COOLING drifts at 6 depots; 2 other-model vans at `D-001` |
-| Heatwave | region R3 +10 °C over T0+12 h … T0+60 h |
+| Heatwave | region R3 +10 °C over T0+12 h … T0+60 h (ground truth: `scenario_id = 'heatwave'`, onset = heatwave start) |
 | Also | 20 loud-but-stable vans, 3 sensor glitches, naturally-hot vans (~2% of diesel), firmware 4.2.1 rollout (16/18 sisters vs 20/42 peers) |
 | Surge | T0+24 h … T0+42 h: 10-minute driving cadence (≈3× send rate) |
 
@@ -77,6 +130,8 @@ Every choice and timing is in `sim.scenario_manifest`. Ground truth is in `sim.g
 | `npm run sim:bench` | Stops the demo and runs bench mode: every vehicle every wall-second for 120 s, 8 workers |
 | `npm run sim:bench:burst` | Bench with `--burst`: 60 s at 1×, **5 minutes at 3×**, 60 s at 1× |
 | `npm run sim:reset` | Clears the demo clock, repairs and history; the next start replays from T0 |
+| `npm run normaliser:reconcile [-- --seconds 300]` | Over a window, checks raw in = canonical out + DLQ + duplicates dropped (in/out/DLQ counted in Kafka via the `x-src-*` headers; duplicates from the normaliser's `/ledger`). With several replicas pass `--ledger http://localhost:9465/ledger,http://localhost:9466/ledger` |
+| `npm run test:integration` | Testcontainers test of the normaliser against real Redpanda + Redis (needs Docker) |
 | `npm run history:big` | Writes 30 days at 2-minute intervals (≈ 1 billion rows at 100K) to its own prefix. Not run by default; needs a lot of disk and time. |
 
 After a bench run, bring the demo back with `docker compose up -d simulator`.
@@ -140,6 +195,7 @@ A 100K-van demo writes about 18K msgs/s on average to the raw topics (measured: 
 | `rustfs` | `rustfs/rustfs:1.0.0` | S3-compatible lake (MinIO's public images were withdrawn) |
 | `topic-init` / `db-migrate` / `lake-init` | redpanda / postgres / `amazon/aws-cli:2.37.4` | One-shot: topics, migrations, lake bucket |
 | `simulator` | built from `services/simulator/Dockerfile` | Seeds, plants, history, demo stream |
+| `normaliser` | built from `services/normaliser/Dockerfile` | S2: raw OEM feeds → validated, de-duplicated canonical events (Avro) + DLQ. Stateless (per-VIN state in Redis): `NORMALISER_REPLICAS=3 docker compose up -d normaliser` scales it, up to 48 (the input partition count). |
 
 ## Measured (step 1b)
 

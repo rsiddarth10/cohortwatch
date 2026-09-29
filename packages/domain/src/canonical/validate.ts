@@ -135,45 +135,48 @@ export function checkJumps(
 
 // ---- Clock skew -----------------------------------------------------------------------------------
 
-/**
- * Skew is judged against an event-time watermark (median of recent event times in the same partition),
- * never against the wall clock: at 360× demo speed, sim time and wall time are not comparable.
- */
+/** A reading more than this far ahead of the time implied by its ingest time is flagged CLOCK_SKEW. */
 export const DEFAULT_SKEW_MS = 2 * 60_000;
 
-export function isAheadOfWatermark(
-  eventTsMs: number,
-  watermarkMs: number | null,
-  thresholdMs = DEFAULT_SKEW_MS,
-): boolean {
-  return watermarkMs !== null && eventTsMs - watermarkMs > thresholdMs;
-}
-
-/** Median of the last `size` event times, recomputed every `every` pushes (O(1) amortised per event). */
-export class EventTimeWatermark {
-  private readonly ring: number[] = [];
+/**
+ * Maps ingest time (the Kafka record timestamp, wall clock) into event time, so a reading's event time can be
+ * compared with "now" without mixing the two clocks: expected event time = offset + speed × ingest, where
+ * `speed` is configured (1 in production; the simulator's speed, e.g. 360, in demo) and `offset` is the median
+ * of (event_ts − speed × ingest) over recent readings. The median ignores the few skewed vans and the
+ * late/out-of-order readings, and needs no knowledge of how dense the stream is.
+ */
+export class IngestClock {
+  private readonly offsets: number[] = [];
   private next = 0;
-  private sinceCompute = 0;
+  private sincePush = 0;
   private cached: number | null = null;
 
   constructor(
-    private readonly size = 256,
+    readonly speed = 1,
+    private readonly size = 512,
     private readonly every = 64,
   ) {}
 
-  push(ts: number): void {
-    if (this.ring.length < this.size) this.ring.push(ts);
-    else this.ring[this.next] = ts;
+  push(eventTsMs: number, ingestMs: number): void {
+    const d = eventTsMs - this.speed * ingestMs;
+    if (this.offsets.length < this.size) this.offsets.push(d);
+    else this.offsets[this.next] = d;
     this.next = (this.next + 1) % this.size;
-    if (++this.sinceCompute >= this.every || this.cached === null) {
-      const s = [...this.ring].sort((a, b) => a - b);
+    if (++this.sincePush >= this.every) {
+      const s = [...this.offsets].sort((x, y) => x - y);
       this.cached = s[Math.floor(s.length / 2)]!;
-      this.sinceCompute = 0;
+      this.sincePush = 0;
     }
   }
 
-  /** Current watermark, or null until enough readings were seen to trust it. */
-  value(): number | null {
-    return this.ring.length >= Math.min(this.size, this.every) ? this.cached : null;
+  /** Event time a reading ingested at `ingestMs` should carry, or null until `every` readings were seen. */
+  expected(ingestMs: number): number | null {
+    return this.cached === null ? null : this.cached + this.speed * ingestMs;
+  }
+
+  /** True when the reading is more than `thresholdMs` ahead of the time its ingest implies. */
+  isAhead(eventTsMs: number, ingestMs: number, thresholdMs = DEFAULT_SKEW_MS): boolean {
+    const e = this.expected(ingestMs);
+    return e !== null && eventTsMs - e > thresholdMs;
   }
 }

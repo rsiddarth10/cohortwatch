@@ -2,15 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FAULT_CODES } from '../catalog.js';
 import { buildVin } from '../vin.js';
 import { eventId, type CanonicalEvent } from './event.js';
-import {
-  DEFAULT_SKEW_MS,
-  DTC_REGEX,
-  EventTimeWatermark,
-  checkJumps,
-  faultFamilyOf,
-  isAheadOfWatermark,
-  validateEvent,
-} from './validate.js';
+import { DEFAULT_SKEW_MS, DTC_REGEX, IngestClock, checkJumps, faultFamilyOf, validateEvent } from './validate.js';
 
 const VIN = buildVin('7KS', 'HM1D8', 2024, 'K', 100001);
 const base: CanonicalEvent = {
@@ -136,22 +128,32 @@ describe('impossible jumps', () => {
   });
 });
 
-describe('clock skew (event time vs an event-time watermark, never the wall clock)', () => {
-  it('flags only events more than the threshold ahead of the watermark', () => {
-    const wm = 1_000_000;
-    expect(isAheadOfWatermark(wm + DEFAULT_SKEW_MS + 1, wm)).toBe(true);
-    expect(isAheadOfWatermark(wm + DEFAULT_SKEW_MS, wm)).toBe(false);
-    expect(isAheadOfWatermark(wm - 3_600_000, wm)).toBe(false); // late is not skew
-    expect(isAheadOfWatermark(wm + 10 * DEFAULT_SKEW_MS, null)).toBe(false); // no watermark yet
+describe('clock skew (event time vs ingest time mapped into event time, never mixed)', () => {
+  it('learns the offset, then flags only readings far ahead of what their ingest time implies', () => {
+    const speed = 360;
+    const c = new IngestClock(speed, 128, 16);
+    const T = 1_790_000_000_000;
+    const W = 1_700_000_000_000; // wall clock of the first ingest
+    expect(c.isAhead(T + 1e9, W)).toBe(false); // nothing learned yet: never flags
+    for (let i = 0; i < 128; i++) {
+      const wall = W + i * 50;
+      // a sparse stream: consecutive readings are 18 sim-seconds apart; 5% are 1-60 sim-min late
+      const late = i % 20 === 0 ? (1 + (i % 60)) * 60_000 : 0;
+      c.push(T + i * 50 * speed - late, wall);
+    }
+    const wall = W + 128 * 50;
+    const now = T + 128 * 50 * speed;
+    expect(c.expected(wall)).toBeCloseTo(now, -3);
+    expect(c.isAhead(now, wall)).toBe(false);
+    expect(c.isAhead(now + 90_000, wall)).toBe(false); // the injected ±90 s skew is tolerated
+    expect(c.isAhead(now + DEFAULT_SKEW_MS + 5_000, wall)).toBe(true);
+    expect(c.isAhead(now - 3_600_000, wall)).toBe(false); // late is not skew
   });
 
-  it('the watermark is the median of recent event times: robust to a few skewed readings', () => {
-    const w = new EventTimeWatermark(100, 10);
-    expect(w.value()).toBeNull();
-    for (let i = 0; i < 100; i++) w.push(i % 20 === 0 ? 1e12 : 1000 + i); // 5% far in the future
-    expect(w.value()).toBeGreaterThan(1000);
-    expect(w.value()).toBeLessThan(1100);
-    for (let i = 0; i < 200; i++) w.push(5000 + i); // it follows time forward
-    expect(w.value()).toBeGreaterThan(5000);
+  it('works at 1× (production) and is not moved by a few skewed vans', () => {
+    const c = new IngestClock(1, 64, 8);
+    for (let i = 0; i < 64; i++) c.push(1000 + i * 1000 + (i % 25 === 0 ? 10 * 60_000 : 0), 1000 + i * 1000);
+    expect(c.expected(100_000)).toBe(100_000);
+    expect(c.speed).toBe(1);
   });
 });

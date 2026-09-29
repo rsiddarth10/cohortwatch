@@ -308,8 +308,9 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
     const base = env.baseline?.metrics[metric];
     if (!base || trendWeight(ms.slow) < p.minWeight) continue;
 
-    // own normal, minus peers (in the metric's unit), then robust z
-    const level = trendMean(ms.slow);
+    // own normal, minus peers (in the metric's unit), then robust z. Level = the fast (3-h) EW mean, which lags a
+    // drift by ~3 h instead of ~12 h; trend = the slow (12-h) EW regression slope.
+    const level = trendMean(ms.fast);
     const dev = level - base.median;
     const slope = trendSlope(ms.slow);
     const devSlope = slope === null ? 0 : slope - base.slopeMedian;

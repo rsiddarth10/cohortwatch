@@ -3,9 +3,10 @@
 Reads the history Parquet (s3://<bucket>/history/dt=*/*.parquet, written by the simulator in 1b) with DuckDB
 and writes, in ONE Postgres transaction (as cw_app; detection never reads sim.*):
 
-  core.vehicle_baseline      per VIN x metric: median + MAD of the 12-h window means, median + MAD of the
-                             12-h window OLS slopes (unit/h). The stream's EW trend has tau = 12 sim-h, so
-                             the baseline is on the same scale as what it is compared with.
+  core.vehicle_baseline      per VIN x metric: median of the 12-h window means and of the 12-h window OLS
+                             slopes (unit/h); MADs of those window values after subtracting the peers'
+                             median deviation in the same window, i.e. on the same (peer-adjusted) scale as
+                             the stream's z-scores.
   core.cohort_baseline       fallback for vans without history: model x duty x region (region_id 0 = all
                              regions), the median of the vans' own values
   core.vehicle_dtc_baseline  a van's usual codes per day, per family
@@ -30,10 +31,11 @@ import time
 
 import duckdb
 
-JOB_VERSION = "baselines-v1"
+JOB_VERSION = "baselines-v2"
 WINDOW_H = 12
 MIN_READINGS_PER_WINDOW = 4
 MIN_WINDOWS = 3
+MIN_PEERS = 10
 
 # Physical ranges (same as the normaliser's validation, packages/domain canonical/validate.ts).
 RANGES = {"coolant_c": (-40, 150), "batt_temp_c": (-40, 90), "lv_batt_v": (6, 18)}
@@ -64,13 +66,35 @@ def compute(con: duckdb.DuckDBPyConnection, src: str) -> dict[str, int]:
         GROUP BY ALL HAVING count(*) >= {MIN_READINGS_PER_WINDOW}
         """
     )
+    # Spread on the stream's scale: the stream subtracts what peers do right now (shared ambient, time of day),
+    # so the spread is measured on window values minus the peers' median deviation in the same window
+    # (region x duty, or the whole region when fewer than MIN_PEERS vans). The median stays the van's own.
+    con.execute(
+        """
+        CREATE OR REPLACE TEMP TABLE wdev AS
+        SELECT w.*, v.region_id, v.duty_type_id,
+               w.level - median(w.level) OVER (PARTITION BY w.vin, w.metric) AS dev,
+               w.slope - median(w.slope) OVER (PARTITION BY w.vin, w.metric) AS sdev
+        FROM win w JOIN veh v USING (vin)
+        """
+    )
+    con.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE wadj AS
+        SELECT *,
+          dev - CASE WHEN count(*) OVER rd >= {MIN_PEERS} THEN median(dev) OVER rd ELSE median(dev) OVER r END AS adj,
+          sdev - CASE WHEN count(sdev) OVER rd >= {MIN_PEERS} THEN median(sdev) OVER rd ELSE median(sdev) OVER r END AS sadj
+        FROM wdev
+        WINDOW rd AS (PARTITION BY region_id, duty_type_id, metric, w), r AS (PARTITION BY region_id, metric, w)
+        """
+    )
     con.execute(
         f"""
         CREATE OR REPLACE TEMP TABLE vb AS
-        SELECT vin, metric, median(level) AS median, mad(level) AS mad,
-               coalesce(median(slope), 0) AS slope_median, coalesce(mad(slope), 0) AS slope_mad,
+        SELECT vin, metric, median(level) AS median, mad(adj) AS mad,
+               coalesce(median(slope), 0) AS slope_median, coalesce(mad(sadj), 0) AS slope_mad,
                count(*)::SMALLINT AS windows, sum(n)::INTEGER AS readings
-        FROM win GROUP BY ALL HAVING count(*) >= {MIN_WINDOWS}
+        FROM wadj GROUP BY ALL HAVING count(*) >= {MIN_WINDOWS}
         """
     )
     con.execute(

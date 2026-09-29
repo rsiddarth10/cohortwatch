@@ -1,11 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { FAULT_CODES } from '../catalog.js';
-import { FAMILIES, METRIC_FAMILY } from './params.js';
+import { FAMILIES, FAULT_CODES, METRIC_FAMILY } from '@cw/domain';
 
 const sql = readFileSync(
-  fileURLToPath(new URL('../../../../infra/db/migrations/005_detection.sql', import.meta.url)),
+  fileURLToPath(new URL('../../../infra/db/migrations/005_detection.sql', import.meta.url)),
   'utf8',
 );
 

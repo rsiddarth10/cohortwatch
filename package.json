@@ -10,7 +10,8 @@
     "packages/domain",
     "packages/common",
     "services/simulator",
-    "services/normaliser"
+    "services/normaliser",
+    "services/state-processor"
   ],
   "scripts": {
     "build": "tsc -b",

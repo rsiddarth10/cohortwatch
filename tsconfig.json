@@ -12,6 +12,9 @@
     },
     {
       "path": "services/normaliser"
+    },
+    {
+      "path": "services/state-processor"
     }
   ]
 }

@@ -44,6 +44,20 @@ jobs:
       - name: Validate compose file
         run: docker compose config -q
 
+  integration:
+    name: integration tests (Testcontainers - Redpanda + Redis)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Integration tests (Docker is available on the runner)
+        run: npm run test:integration
+
   semgrep:
     name: SAST (Semgrep, fail on ERROR only)
     runs-on: ubuntu-24.04

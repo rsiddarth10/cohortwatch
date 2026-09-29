@@ -19,7 +19,7 @@ export default defineConfig({
       reporter: ['text-summary', 'text', 'html', 'lcov', 'json-summary'],
       reportsDirectory: 'coverage',
       include: ['packages/*/src/**/*.ts', 'services/*/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/index.ts'],
+      exclude: ['**/*.test.ts', '**/*.itest.ts', '**/index.ts'],
       thresholds: {
         // Brief §2.2: pure domain logic at >= 80%.
         'packages/domain/src/**': { lines: 80, functions: 80, branches: 80, statements: 80 },

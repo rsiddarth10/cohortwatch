@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { createLogger } from '@cw/common';
 import { CanonicalEventSchema, DEFAULT_VALIDATION, IngestClock, type CanonicalEvent } from '@cw/domain';
@@ -16,8 +17,7 @@ import { StateStore } from './state-store.js';
  * the same event_id (uuid5 of vin:seq), so consumers dedupe. See docs/adr/0001-normaliser-anti-replay-and-delivery.md.
  */
 
-const cfg = loadConfig();
-const log = createLogger('normaliser', cfg.LOG_LEVEL);
+let log = createLogger('normaliser', process.env.LOG_LEVEL ?? 'info');
 
 function headersOf(h: KafkaJS.IHeaders | undefined): Record<string, string> {
   const out: Record<string, string> = {};
@@ -35,7 +35,7 @@ const srcHeaders = (r: RawRecord) => ({
 });
 
 /** Consistent snapshot for `normaliser:reconcile` (plain JSON, updated synchronously at commit). */
-interface Ledger {
+export interface Ledger {
   committed: Record<string, Record<string, string>>;
   in: number;
   out: number;
@@ -55,7 +55,19 @@ async function registerWithRetry(url: string): Promise<number> {
   }
 }
 
-async function main(c: NormaliserConfig): Promise<void> {
+/** Test seams: fault injection between the durable steps of a batch (used by the integration test). */
+export interface NormaliserHooks {
+  /** Runs after produce + state write, before the offset commit. Throwing simulates a crash there. */
+  beforeCommit?: (b: { topic: string; partition: number; lastOffset: string }) => void | Promise<void>;
+}
+
+export interface RunningNormaliser {
+  ledger: Ledger;
+  stop(): Promise<void>;
+}
+
+export async function startNormaliser(c: NormaliserConfig, hooks: NormaliserHooks = {}): Promise<RunningNormaliser> {
+  log = createLogger('normaliser', c.LOG_LEVEL);
   const metrics = new NormaliserMetrics();
   const ledger: Ledger = { committed: {}, in: 0, out: 0, dlq: 0, duplicates: 0 };
   let healthy = false;
@@ -232,6 +244,7 @@ async function main(c: NormaliserConfig): Promise<void> {
         log.info({ topic: batch.topic, partition: batch.partition }, 'batch stale after revoke; not committing');
         return;
       }
+      await hooks.beforeCommit?.({ topic: batch.topic, partition: batch.partition, lastOffset: last });
       const next = (BigInt(last) + 1n).toString();
       await consumer.commitOffsets([{ topic: batch.topic, partition: batch.partition, offset: next }]);
       resolveOffset(last);
@@ -248,7 +261,7 @@ async function main(c: NormaliserConfig): Promise<void> {
   });
   healthy = true;
 
-  const shutdown = async (code: number) => {
+  const stop = async () => {
     healthy = false;
     clearInterval(bpTimer);
     clearInterval(lagTimer);
@@ -257,11 +270,9 @@ async function main(c: NormaliserConfig): Promise<void> {
     await producer.disconnect().catch(() => undefined);
     await admin.disconnect().catch(() => undefined);
     await store.close().catch(() => undefined);
-    server.close();
-    process.exit(code);
+    await new Promise((r) => server.close(r));
   };
-  process.on('SIGTERM', () => void shutdown(0));
-  process.on('SIGINT', () => void shutdown(0));
+  return { ledger, stop };
 }
 
 function schemaReject(src: RawRecord, err: unknown): DlqOut {
@@ -280,7 +291,16 @@ function schemaReject(src: RawRecord, err: unknown): DlqOut {
   };
 }
 
-main(cfg).catch((err: unknown) => {
-  log.fatal({ err }, 'normaliser failed');
-  process.exit(1);
-});
+// Run only when executed directly (`node dist/main.js`), not when imported by a test.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startNormaliser(loadConfig())
+    .then((n) => {
+      const exit = () => void n.stop().then(() => process.exit(0));
+      process.on('SIGTERM', exit);
+      process.on('SIGINT', exit);
+    })
+    .catch((err: unknown) => {
+      log.fatal({ err }, 'normaliser failed');
+      process.exit(1);
+    });
+}

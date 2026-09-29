@@ -65,6 +65,9 @@ batch job), updated online by an exponentially weighted regression (O(1) per rea
 robust z-score against that van's own spread, after subtracting what its peers in the same region and duty are
 doing at the same time, and must persist (4 of the last 6 readings).
 
+**Result (S3 scorecard, N = 5,000, T0 → T0+72 h).** Same real faults caught as a global threshold (35/35), with
+4.1 vs 126 false incidents per 1,000 healthy vans; heatwave 3.6% vs 84%; runaway critical 5.8 h before limit.
+
 **Why rules alone were not enough.** One fleet-wide threshold (coolant > 97 °C) cannot tell three things apart:
 - a van that always runs hot (about 2% of diesels run 6–8 °C above the rest and are healthy);
 - a heatwave that lifts every van in a region;

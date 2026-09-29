@@ -6,9 +6,15 @@ Each van is compared to **its own normal**, minus what its peers in the same con
 persist become incidents with plain-language clues, and incidents that share a cause become one **campaign**
 (fault family × model × duty × depot). Full scope: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
 
-> Status: **step 1b** — a 100,000-vehicle simulator with planted outbreaks, decoys and realistic mess, streaming two
-> OEM formats live, plus 7 days of history in an S3 lake and a private ground truth. Detection, campaigns, the API
-> and the UI come in later steps.
+> Status: **step S3.** Built so far:
+> - a 100,000-vehicle simulator (planted outbreaks, decoys, realistic mess, two OEM formats, 7 days of history in an
+>   S3 lake, private ground truth);
+> - the normaliser (S2);
+> - the state processor, which compares each van with its own normal minus its peers and raises incidents with
+>   clues and runaway flags (S3).
+>
+> On the S3 scorecard (N = 5,000): it catches the same real faults as a global threshold (35/35) with 4.1 vs 126
+> false incidents per 1,000 healthy vans. Queue, campaigns, API and UI come in later steps.
 
 ## Quick start
 
@@ -140,7 +146,9 @@ Every choice and timing is in `sim.scenario_manifest`. Ground truth is in `sim.g
 | `npm run sim:bench:burst` | Bench with `--burst`: 60 s at 1×, **5 minutes at 3×**, 60 s at 1× |
 | `npm run sim:reset` | Clears the demo clock, repairs and history; the next start replays from T0 |
 | `npm run normaliser:reconcile [-- --seconds 300]` | Over a window, checks raw in = canonical out + DLQ + duplicates dropped (in/out/DLQ counted in Kafka via the `x-src-*` headers; duplicates from the normaliser's `/ledger`). With several replicas pass `--ledger http://localhost:9465/ledger,http://localhost:9466/ledger` |
-| `npm run test:integration` | Testcontainers test of the normaliser against real Redpanda + Redis (needs Docker) |
+| `npm run eval:incidents` | S3 scorecard (an evaluation tool, runs as `cw_sim`): per ground-truth role, vans flagged by the state processor vs by the simple global threshold, onset → incident hours for both, runaway hours of warning, background false incidents per 1,000 vans. Against the compose stack: `SIM_SCALE=100000 npm run eval:incidents` |
+| `npm run vehicle:normal -- --vin <VIN> [--metric coolant_c]` | One van vs its own normal, hourly (the S8 chart query: `core.telemetry_hourly` joined with the van's baseline band) |
+| `npm run test:integration` | Testcontainers tests against real Redpanda + Redis (+ TimescaleDB for the state processor); needs Docker |
 | `npm run history:big` | Writes 30 days at 2-minute intervals (≈ 1 billion rows at 100K) to its own prefix. Not run by default; needs a lot of disk and time. |
 
 After a bench run, bring the demo back with `docker compose up -d simulator`.
@@ -159,7 +167,10 @@ services remember sequence numbers, so replaying from T0 into an existing stack 
 | `MESS` | on | mess injection on the raw topics |
 | `AUTO_REPAIRS` | off | `on` repairs the S1 sisters at ~T0+30 h for unattended demos |
 | `DEPOT_TRANSFER` | off | `on` moves 2 S1 sisters to another depot at T0+30 h |
-| `GLOBAL_COOLANT_THRESHOLD_C` / `GLOBAL_BATT_TEMP_THRESHOLD_C` | 97 / 47 | simple global thresholds, used only by checks #10/#11 and the S9 baseline |
+| `GLOBAL_COOLANT_THRESHOLD_C` / `GLOBAL_BATT_TEMP_THRESHOLD_C` | 97 / 47 | simple global thresholds: checks #10/#11, and the shadow rule the state processor runs for the evaluation baseline |
+| `STATE_REPLICAS` | 3 | state-processor replicas (up to 48) |
+| `TELEMETRY` / `TELEMETRY_BUCKET_MIN` | on / 60 | telemetry writer on/off; down-sampling bucket in sim-minutes |
+| `DETECT_*`, `RUNAWAY_*`, `DTC_*` | reference plan §9.3–9.5 | detection thresholds (see `services/state-processor/src/config.ts`) |
 | `LAPTOP_RETENTION` / `KAFKA_PARTITION_BYTES` / `BENCH_PARTITION_BYTES` | on / 268435456 / 16777216 | disk caps on the high-volume and bench topics (see [Disk](#disk)) |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `LAKE_BUCKET` | RustFS in compose | any S3-compatible store works |
 
@@ -204,7 +215,10 @@ A 100K-van demo writes about 18K msgs/s on average to the raw topics (measured: 
 | `rustfs` | `rustfs/rustfs:1.0.0` | S3-compatible lake (MinIO's public images were withdrawn) |
 | `topic-init` / `db-migrate` / `lake-init` | redpanda / postgres / `amazon/aws-cli:2.37.4` | One-shot: topics, migrations, lake bucket |
 | `simulator` | built from `services/simulator/Dockerfile` | Seeds, plants, history, demo stream |
+| `sim-history` | simulator image, one-shot | Seeds, plants, writes the 7-day history (van traits, no faults) to the lake, exits. Idempotent |
+| `baselines` | built from `batch/baselines/Dockerfile` (Python 3.12 + DuckDB) | S3 batch analytics, one-shot: each van's normal (median/MAD of level and slope), model × duty × region cohorts, usual code rates, fault-rate table → Postgres. Skipped when the history was already processed |
 | `normaliser` | built from `services/normaliser/Dockerfile` | S2: raw OEM feeds → validated, de-duplicated canonical events (Avro) + DLQ. Stateless (per-VIN state in Redis). **3 replicas by default**; `NORMALISER_REPLICAS=N docker compose up -d normaliser` scales it, up to 48 (the input partition count). Measured: [docs/perf/normaliser.md](docs/perf/normaliser.md). |
+| `state-processor` | built from `services/state-processor/Dockerfile` | S3: canonical events → each van vs its own normal, minus its peers, confirmed 4 of 6 → incidents with plain-language clues (`incidents.v1`, key = family key, and `core.incident`); runaway = critical; down-sampled telemetry (`core.telemetry` hypertable + hourly aggregate). Per-VIN state in memory per partition, checkpointed to Redis (ADR 0005). **3 replicas by default** (`STATE_REPLICAS`). Measured: [docs/perf/state-processor.md](docs/perf/state-processor.md). |
 
 ## Measured (step 1b)
 

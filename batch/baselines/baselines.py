@@ -6,7 +6,8 @@ and writes, in ONE Postgres transaction (as cw_app; detection never reads sim.*)
   core.vehicle_baseline      per VIN x metric: median + MAD of the 12-h window means, median + MAD of the
                              12-h window OLS slopes (unit/h). The stream's EW trend has tau = 12 sim-h, so
                              the baseline is on the same scale as what it is compared with.
-  core.cohort_baseline       model x duty fallback (median of the vans' own values) for vans without history
+  core.cohort_baseline       fallback for vans without history: model x duty x region (region_id 0 = all
+                             regions), the median of the vans' own values
   core.vehicle_dtc_baseline  a van's usual codes per day, per family
   core.fault_rate            codes per 1,000 vehicle-days by family x model x duty x depot (S5 expected rate)
   core.baseline_run          rows scanned, seconds, source hash
@@ -52,7 +53,7 @@ def _metric_rows_sql(src: str) -> str:
 
 def compute(con: duckdb.DuckDBPyConnection, src: str) -> dict[str, int]:
     """Builds result tables vb, cb, dtcb, fr in `con`. Needs tables veh(vin, model_id, duty_type_id,
-    depot_id) and codes(code, family); `src` is a relation (e.g. read_parquet(...)) of history rows."""
+    depot_id, region_id) and codes(code, family); `src` is a relation (e.g. read_parquet(...)) of history rows."""
     con.execute(f"CREATE OR REPLACE TEMP VIEW hist AS SELECT * FROM {src}")
     con.execute(
         f"""
@@ -75,9 +76,11 @@ def compute(con: duckdb.DuckDBPyConnection, src: str) -> dict[str, int]:
     con.execute(
         """
         CREATE OR REPLACE TEMP TABLE cb AS
-        SELECT v.model_id, v.duty_type_id, b.metric, median(b.median) AS median, median(b.mad) AS mad,
-               median(b.slope_median) AS slope_median, median(b.slope_mad) AS slope_mad, count(*)::INTEGER AS vins
-        FROM vb b JOIN veh v USING (vin) GROUP BY ALL
+        SELECT v.model_id, v.duty_type_id, coalesce(v.region_id, 0)::SMALLINT AS region_id, b.metric,
+               median(b.median) AS median, median(b.mad) AS mad, median(b.slope_median) AS slope_median,
+               median(b.slope_mad) AS slope_mad, count(*)::INTEGER AS vins
+        FROM vb b JOIN veh v USING (vin)
+        GROUP BY GROUPING SETS ((v.model_id, v.duty_type_id, v.region_id, b.metric), (v.model_id, v.duty_type_id, b.metric))
         """
     )
     # codes: one row per code in the pipe-joined dtc column; unknown valid codes are OTHER
@@ -159,8 +162,8 @@ def _write(pg, run: dict, con: duckdb.DuckDBPyConnection) -> None:
         specs = [
             ("vehicle_baseline", "vin, metric, median, mad, slope_median, slope_mad, windows, readings",
              "SELECT vin, metric, median, mad, slope_median, slope_mad, windows, readings FROM vb"),
-            ("cohort_baseline", "model_id, duty_type_id, metric, median, mad, slope_median, slope_mad, vins",
-             "SELECT model_id, duty_type_id, metric, median, mad, slope_median, slope_mad, vins FROM cb"),
+            ("cohort_baseline", "model_id, duty_type_id, region_id, metric, median, mad, slope_median, slope_mad, vins",
+             "SELECT model_id, duty_type_id, region_id, metric, median, mad, slope_median, slope_mad, vins FROM cb"),
             ("vehicle_dtc_baseline", "vin, fault_family, codes_per_day",
              "SELECT vin, family, codes_per_day FROM dtcb"),
             ("fault_rate", "fault_family, model_id, duty_type_id, depot_id, vehicle_days, codes, per_1000_vehicle_days",
@@ -203,8 +206,9 @@ def main(argv: list[str] | None = None) -> int:
         con.execute(
             """
             CREATE TEMP TABLE veh AS SELECT * FROM postgres_query('pg', $$
-              SELECT v.vin::text AS vin, v.model_id, v.duty_type_id, a.depot_id
-              FROM core.vehicle v JOIN core.vehicle_depot_assignment a ON a.vin = v.vin AND upper_inf(a.valid) $$)
+              SELECT v.vin::text AS vin, v.model_id, v.duty_type_id, a.depot_id, d.region_id
+              FROM core.vehicle v JOIN core.vehicle_depot_assignment a ON a.vin = v.vin AND upper_inf(a.valid)
+              JOIN core.depot d ON d.id = a.depot_id $$)
             """
         )
         con.execute("CREATE TEMP TABLE codes AS SELECT code, fault_family AS family FROM pg.core.fault_code")

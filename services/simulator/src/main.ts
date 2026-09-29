@@ -13,7 +13,7 @@ import {
 import { HOUR_MS, SimClock, workerRange } from '@cw/domain';
 import pg from 'pg';
 import { configPath } from './config-path.js';
-import { dtOf, manifestKey, type HistoryManifest, type HistorySpec } from './history.js';
+import { dtOf, HISTORY_CONTENT, manifestKey, type HistoryManifest, type HistorySpec } from './history.js';
 import {
   BENCH_SPEC_ENV,
   BENCH_TOPIC,
@@ -97,7 +97,8 @@ async function ensureHistory(
     existing &&
     existing.registryHash === world.registryHash &&
     existing.days === want.days &&
-    existing.intervalMin === want.intervalMin
+    existing.intervalMin === want.intervalMin &&
+    existing.plants === HISTORY_CONTENT
   ) {
     log.info(
       { prefix: spec.prefix, rows: existing.rows, files: existing.files },
@@ -136,7 +137,7 @@ async function ensureHistory(
     toTs: new Date(t0).toISOString(),
     generatedAt: new Date().toISOString(),
     wallSeconds: Math.round((Date.now() - started) / 1000),
-    plants: 'none (history is plant-free)',
+    plants: HISTORY_CONTENT,
   };
   await lake.putJson(manifestKey(spec.prefix), manifest);
   log.info(

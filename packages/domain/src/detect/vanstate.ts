@@ -314,7 +314,7 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
     const slope = trendSlope(ms.slow);
     const devSlope = slope === null ? 0 : slope - base.slopeMedian;
     const scopes = env.peerKeys(metric);
-    let ctx = { level: 0, slope: 0, peers: 0 };
+    let ctx = { level: 0, slope: 0, fastSlope: 0, peers: 0 };
     let scope = '';
     for (const s of scopes) {
       const c = env.peers.centre(s.key, ev.ts);
@@ -324,7 +324,8 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
         break;
       }
     }
-    for (const s of scopes) env.peers.update(s.key, ev.vin, dev, devSlope, ev.ts);
+    const fastSlope = trendSlope(ms.fast);
+    for (const s of scopes) env.peers.update(s.key, ev.vin, dev, devSlope, ev.ts, fastSlope ?? 0);
     const zL = mp.direction * robustZ(dev - ctx.level, base.mad, mp.minMad);
     const zS = slope === null ? 0 : mp.direction * robustZ(devSlope - ctx.slope, base.slopeMad, mp.minSlopeMad);
     const abnormal = zL >= p.zLevel || (zS >= p.zSlope && zL >= p.zLevelWithSlope);
@@ -334,8 +335,11 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
     // time to limit from the fast trend; runaway after several readings in a row under the line
     let ttl: number | null = null;
     if (mp.hardLimit !== null) {
-      ttl = hoursToLimit(trendFitNow(ms.fast), trendSlope(ms.fast), mp.hardLimit, mp.runawayMinRatePerH, mp.direction);
-      ms.ttlRun = zL >= p.zLevelWithSlope ? runawayRun(ms.ttlRun, ttl, p.runawayHours) : 0;
+      // the van's own rate minus what its peers are doing right now (shared heating is not a runaway)
+      const rate = fastSlope === null ? null : fastSlope - ctx.fastSlope;
+      ttl = hoursToLimit(trendFitNow(ms.fast), rate, mp.hardLimit, mp.runawayMinRatePerH, mp.direction);
+      // only a van that is abnormal after peer adjustment, and confirmed k of n, can become a runaway
+      ms.ttlRun = abnormal && kofnConfirmed(ms.win, p.k) ? runawayRun(ms.ttlRun, ttl, p.runawayHours) : 0;
     }
     const runawayNow = ms.ttlRun >= p.runawayConsecutive;
 
@@ -384,7 +388,7 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
       ],
     });
 
-    if (!open && (kofnConfirmed(ms.win, p.k) || runawayNow)) {
+    if (!open && kofnConfirmed(ms.win, p.k)) {
       const bucket = windowBucketOf(ev.ts, p.windowBucketH);
       const inc: OpenIncident = {
         id: incidentIdOf(ev.vin, fam, bucket),

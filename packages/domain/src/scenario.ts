@@ -428,8 +428,8 @@ export function buildScenario(reg: Registry, params: SimParams, opts: ScenarioOp
         const activeH = dutyById(v.dutyId).activeH ?? 4;
         // Independent RNG per (VIN, hour): a repair only changes hours after it.
         for (let h = Math.floor(w.onMs / HOUR_MS); h * HOUR_MS < w.offMs; h++) {
-          // Plants start at T0: nothing before it (history stays plant-free).
-          const from = Math.max(w.onMs + 2 * MINUTE_MS, h * HOUR_MS, scenario.t0Ms);
+          // Faults start at T0 (history stays fault-free); loudness is a van trait, present in history too.
+          const from = Math.max(w.onMs + 2 * MINUTE_MS, h * HOUR_MS, p.drift ? scenario.t0Ms : -Infinity);
           const to = Math.min(w.offMs - 2 * MINUTE_MS, (h + 1) * HOUR_MS);
           if (to <= from) continue;
           // Rate at the slot start: a repair at time r changes only slots starting after r,
@@ -464,6 +464,25 @@ export function buildScenario(reg: Registry, params: SimParams, opts: ScenarioOp
       },
     };
   }
+}
+
+/**
+ * Van traits only, no faults: the hooks history is generated with. A loud-but-stable van is loud every day
+ * (its codes are part of its normal, so its own baseline learns them); naturally-hot vans are already in the
+ * healthy profile. Drift, glitches, the heatwave, the surge, the runaway run and transfers stay out.
+ */
+export function traitHooks(scenario: Scenario): ScenarioHooks {
+  return {
+    ambientDeltaC: () => 0,
+    cadenceMs: (_t, baseMs) => baseMs,
+    overrideWindows: (_v, _day, _dayStart, windows) => windows,
+    coolantDeltaC: () => 0,
+    extraDtc: (v, w, repairAtMs) =>
+      scenario.plants.get(v.vin)?.loudCodesPerDay ? scenario.extraDtc(v, w, repairAtMs) : [],
+    styleFactor: () => 1,
+    glitchDay: () => null,
+    homeDepotId: (v) => v.homeDepotId,
+  };
 }
 
 /** Coolant added by a plant at sim time t, honouring a repair (the bad repair keeps drifting). */

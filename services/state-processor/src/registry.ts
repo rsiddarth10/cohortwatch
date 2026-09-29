@@ -39,6 +39,7 @@ interface BaselineRow {
   vin?: string;
   model_id?: number;
   duty_type_id?: number;
+  region_id?: number;
   metric: Metric;
   median: number;
   mad: number;
@@ -83,7 +84,7 @@ export class RegistryCache {
         'SELECT vin::text AS vin, metric, median, mad, slope_median, slope_mad FROM core.vehicle_baseline',
       ),
       this.pool.query<BaselineRow>(
-        'SELECT model_id, duty_type_id, metric, median, mad, slope_median, slope_mad FROM core.cohort_baseline',
+        'SELECT model_id, duty_type_id, region_id, metric, median, mad, slope_median, slope_mad FROM core.cohort_baseline',
       ),
       this.pool.query<{ vin: string; fault_family: Family; codes_per_day: number }>(
         'SELECT vin::text AS vin, fault_family, codes_per_day FROM core.vehicle_dtc_baseline',
@@ -105,7 +106,7 @@ export class RegistryCache {
     }
     const cohorts = new Map<string, Partial<Record<Metric, MetricBaseline>>>();
     for (const r of cohort.rows) {
-      const k = `${r.model_id}|${r.duty_type_id}`;
+      const k = `${r.model_id}|${r.duty_type_id}|${r.region_id}`;
       (cohorts.get(k) ?? cohorts.set(k, {}).get(k)!)[r.metric] = toMetric(r, 'COHORT');
     }
     const ownByVin = new Map<string, Partial<Record<Metric, MetricBaseline>>>();
@@ -118,10 +119,15 @@ export class RegistryCache {
     let withOwn = 0;
     for (const [vin, v] of vans) {
       const mine = ownByVin.get(vin) ?? {};
-      const cohortOf = cohorts.get(`${v.modelId}|${v.dutyId}`) ?? {};
+      // a new van without history: its model × duty cohort in its own region (climate), else in all regions
+      const region = v.assignments.reduce((a, b) => (b.from > a.from ? b : a)).regionId;
+      const cohortOf = {
+        ...cohorts.get(`${v.modelId}|${v.dutyId}|0`),
+        ...cohorts.get(`${v.modelId}|${v.dutyId}|${region}`),
+      };
       const metrics: Partial<Record<Metric, MetricBaseline>> = {};
       for (const m of METRICS) {
-        const b = mine[m] ?? cohortOf[m]; // a new van without history uses its model × duty cohort
+        const b = mine[m] ?? cohortOf[m];
         if (b) metrics[m] = b;
       }
       if (ownByVin.has(vin)) withOwn++;

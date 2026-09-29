@@ -1,7 +1,15 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { dayIndexAt, dayStartMs, generateVehicleDay, initialState, makeWorldContext, workerRange } from '@cw/domain';
+import {
+  dayIndexAt,
+  dayStartMs,
+  generateVehicleDay,
+  initialState,
+  makeWorldContext,
+  traitHooks,
+  workerRange,
+} from '@cw/domain';
 import type { World } from './world.js';
 import type { Lake } from './lake.js';
 import { EVENT_SELECT, EVENT_TABLE_DDL, appendEvent, copyToParquet, openDuck } from './parquet.js';
@@ -26,8 +34,11 @@ export interface HistoryManifest {
   toTs: string;
   generatedAt: string;
   wallSeconds: number;
-  plants: 'none (history is plant-free)';
+  plants: typeof HISTORY_CONTENT;
 }
+
+/** What history contains; a history written with different content is regenerated. */
+export const HISTORY_CONTENT = 'van traits only (loud-but-stable codes); no faults' as const;
 
 export const manifestKey = (prefix: string) => `${prefix}_manifest.json`;
 export const dtOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -45,8 +56,8 @@ export async function writeHistoryRange(
   progress: (day: number, rows: number) => void,
 ): Promise<{ rows: number; files: number }> {
   const { registry, params } = world;
-  // History is plant-free: no scenario hooks (the firmware rollout is registry data and stays).
-  const ctx = makeWorldContext(registry, params);
+  // History is fault-free: only van traits (loud-but-stable codes) apply; the firmware rollout is registry data.
+  const ctx = makeWorldContext(registry, params, traitHooks(world.scenario));
   const { start, end } = workerRange(registry.n, workers, worker);
   const vehicles = registry.vehicles.slice(start, end);
   const states = vehicles.map((v) => initialState(v, ctx));

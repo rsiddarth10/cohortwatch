@@ -21,6 +21,8 @@ interface Row {
   global: number;
   lag_p50: number | null;
   lag_max: number | null;
+  glag_p50: number | null;
+  glag_max: number | null;
   critical: number;
   warn_min: number | null;
   warn_max: number | null;
@@ -54,6 +56,8 @@ per_van AS (
     EXISTS (SELECT 1 FROM core.global_rule_hit h WHERE h.vin = gt.vin) AS global,
     (SELECT extract(epoch FROM min(inc.opened_ts) - gt.onset_ts) / 3600 FROM inc
       WHERE inc.vin = gt.vin AND inc.fault_family = gt.fault_family) AS lag_h,
+    (SELECT extract(epoch FROM min(h.first_ts) - gt.onset_ts) / 3600 FROM core.global_rule_hit h
+      WHERE h.vin = gt.vin) AS glag_h,
     (SELECT bool_or(inc.runaway) FROM inc WHERE inc.vin = gt.vin) AS critical,
     (SELECT extract(epoch FROM gt.limit_ts - min(inc.critical_ts)) / 3600 FROM inc
       WHERE inc.vin = gt.vin AND inc.critical_ts IS NOT NULL) AS warn_h
@@ -67,6 +71,8 @@ SELECT role, count(*)::int AS vans,
   count(*) FILTER (WHERE global)::int AS global,
   percentile_cont(0.5) WITHIN GROUP (ORDER BY lag_h)::float8 AS lag_p50,
   max(lag_h)::float8 AS lag_max,
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY glag_h)::float8 AS glag_p50,
+  max(glag_h)::float8 AS glag_max,
   count(*) FILTER (WHERE critical)::int AS critical,
   min(warn_h)::float8 AS warn_min, max(warn_h)::float8 AS warn_max
 FROM per_van GROUP BY role ORDER BY role`;
@@ -107,6 +113,7 @@ async function main(): Promise<void> {
       'global',
       'global %',
       'onset→incident h (p50/max)',
+      'global onset→hit h',
       'critical',
       'warning h',
     ];
@@ -121,6 +128,7 @@ async function main(): Promise<void> {
       String(r.global),
       pct(r.global, r.vans),
       r.lag_p50 === null ? '–' : `${f1(r.lag_p50)} / ${f1(r.lag_max)}`,
+      r.glag_p50 === null ? '–' : `${f1(r.glag_p50)} / ${f1(r.glag_max)}`,
       r.critical ? String(r.critical) : '',
       r.warn_min === null ? '' : r.warn_min === r.warn_max ? f1(r.warn_min) : `${f1(r.warn_min)}–${f1(r.warn_max)}`,
     ]); // prettier-ignore

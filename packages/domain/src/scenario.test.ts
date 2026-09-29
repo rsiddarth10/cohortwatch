@@ -3,7 +3,7 @@ import { modelById, dutyById, regionById, S1_MODEL_CODE } from './catalog.js';
 import { buildGroundTruth, computeLimitTs, isDrivingReading } from './groundtruth.js';
 import { DEFAULT_PARAMS } from './params.js';
 import { generateRegistry } from './registry.js';
-import { applyFirmwarePlant, buildScenario, driftDelta } from './scenario.js';
+import { applyFirmwarePlant, buildScenario, driftDelta, traitHooks } from './scenario.js';
 import { FleetStream, VehicleStream, ambientAt, makeWorldContext, type SimEvent } from './simulate.js';
 import { HOUR_MS, MINUTE_MS, SimClock } from './time.js';
 
@@ -202,8 +202,8 @@ describe('plant signals', () => {
     expect(sc.cadenceMs(T0 + 50 * HOUR_MS, 30 * MINUTE_MS)).toBe(30 * MINUTE_MS);
   });
 
-  it('plants never touch history: events before T0 match a plant-free world exactly', () => {
-    for (const vin of [...vinsOf('s1_sister').slice(0, 3), vinsOf('runaway')[0]!, vinsOf('loud_stable')[0]!]) {
+  it('faults never touch history: events before T0 match a fault-free world exactly', () => {
+    for (const vin of [...vinsOf('s1_sister').slice(0, 3), vinsOf('runaway')[0]!]) {
       const withPlants = stream(vin, reg.epochMs, T0);
       const ctx = makeWorldContext(reg, P);
       const s = new VehicleStream(byVin.get(vin)!, ctx, reg.epochMs);
@@ -211,6 +211,16 @@ describe('plant signals', () => {
       for (let e = s.next(); e.eventTs < T0; e = s.next()) plain.push(e);
       expect(withPlants).toEqual(plain);
     }
+  });
+
+  it('loudness is a van trait: a loud van is loud in history too, identical to the traits-only world', () => {
+    const vin = vinsOf('loud_stable')[0]!;
+    const withPlants = stream(vin, reg.epochMs, T0);
+    const s = new VehicleStream(byVin.get(vin)!, makeWorldContext(reg, P, traitHooks(sc)), reg.epochMs);
+    const traits: SimEvent[] = [];
+    for (let e = s.next(); e.eventTs < T0; e = s.next()) traits.push(e);
+    expect(withPlants).toEqual(traits);
+    expect(traits.filter((e) => e.evt === 'DTC').length).toBeGreaterThan(20);
   });
 });
 

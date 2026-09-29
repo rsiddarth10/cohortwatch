@@ -150,7 +150,7 @@ describe('peer context', () => {
     expect(Math.abs(peers.centre(key, T0).level)).toBeLessThan(0.3);
     const few = new PeerContext(2, 10);
     few.update('x', 'A', 10, 0, T0);
-    expect(few.centre('x', T0)).toEqual({ level: 0, slope: 0, peers: 0 });
+    expect(few.centre('x', T0)).toEqual({ level: 0, slope: 0, fastSlope: 0, peers: 0 });
     expect(few.centre('nothing', T0).peers).toBe(0);
   });
 

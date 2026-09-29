@@ -18,12 +18,15 @@ export interface PeerCentre {
   /** Median deviation of level (unit) and of slope (unit/h); 0 when there are too few peers. */
   level: number;
   slope: number;
+  /** Median of the peers' fast-trend rate (unit/h): shared heating (time of day, a heatwave) right now. */
+  fastSlope: number;
   peers: number;
 }
 
 interface Entry {
   level: number;
   slope: number;
+  fastSlope: number;
   ts: number;
 }
 
@@ -34,7 +37,7 @@ interface Ctx {
   updatesSince: number;
 }
 
-const NONE: PeerCentre = { level: 0, slope: 0, peers: 0 };
+const NONE: PeerCentre = { level: 0, slope: 0, fastSlope: 0, peers: 0 };
 
 export class PeerContext {
   private readonly ctxs = new Map<string, Ctx>();
@@ -44,7 +47,7 @@ export class PeerContext {
     private readonly minPeers: number,
   ) {}
 
-  update(key: string, vin: string, level: number, slope: number, tsMs: number): void {
+  update(key: string, vin: string, level: number, slope: number, tsMs: number, fastSlope = 0): void {
     let c = this.ctxs.get(key);
     if (!c) {
       c = { entries: new Map(), cached: null, cachedHour: -1, updatesSince: 0 };
@@ -52,7 +55,7 @@ export class PeerContext {
     }
     const prev = c.entries.get(vin);
     if (prev && prev.ts > tsMs) return; // keep the newest
-    c.entries.set(vin, { level, slope, ts: tsMs });
+    c.entries.set(vin, { level, slope, fastSlope, ts: tsMs });
     c.updatesSince++;
   }
 
@@ -64,16 +67,20 @@ export class PeerContext {
     const from = tsMs - this.windowH * HOUR_MS;
     const levels: number[] = [];
     const slopes: number[] = [];
+    const fast: number[] = [];
     for (const [vin, e] of c.entries) {
       if (e.ts < from - 24 * HOUR_MS) {
         c.entries.delete(vin); // long gone (parked or moved context)
       } else if (e.ts >= from && e.ts <= tsMs + this.windowH * HOUR_MS) {
         levels.push(e.level);
         slopes.push(e.slope);
+        fast.push(e.fastSlope);
       }
     }
     c.cached =
-      levels.length < this.minPeers ? NONE : { level: median(levels), slope: median(slopes), peers: levels.length };
+      levels.length < this.minPeers
+        ? NONE
+        : { level: median(levels), slope: median(slopes), fastSlope: median(fast), peers: levels.length };
     c.cachedHour = hour;
     c.updatesSince = 0;
     return c.cached;

@@ -254,6 +254,7 @@ describe('stepVan: peer adjustment', () => {
     const states = Array.from({ length: 40 }, () => emptyVan());
     const rnds = states.map((_, i) => noise(100 + i));
     const opened = new Set<number>();
+    const critical = new Set<number>();
     for (let s = 0; s <= 144; s++) {
       const h = s / 2;
       states.forEach((st, i) => {
@@ -264,15 +265,26 @@ describe('stepVan: peer adjustment', () => {
         );
         states[i] = r.state;
         if (r.incidents.some((x) => x.action === 'OPEN')) opened.add(i);
+        if (r.incidents.some((x) => x.runaway)) critical.add(i);
       });
     }
-    return opened;
+    return Object.assign(opened, { critical });
   }
   const heat = (h: number) => (h < 12 ? 0 : Math.min((h - 12) * 1, 8)); // shared +8 °C (heatwave)
 
   it('a shared heatwave shift raises nothing with peer adjustment, and many incidents without', () => {
     expect(fleet(heat, 'R3|1').size).toBe(0);
     expect(fleet(heat, null).size).toBeGreaterThan(30);
+  });
+
+  it('a steep shared heat step never becomes a runaway; a real runaway among the same peers does', () => {
+    const step = (h: number) => (h < 12 ? 0 : Math.min((h - 12) * 2.5, 16)); // shared +16 °C in ~6 h
+    const shared = fleet(step, 'R3|1');
+    expect(shared.critical.size).toBe(0);
+    expect(shared.size).toBe(0);
+    const quad = (h: number) => (h < 10 ? 0 : 0.038 * (h - 10) ** 2);
+    const one = fleet((h, i) => step(h) + (i === 0 ? quad(h) : 0), 'R3|1');
+    expect([...one.critical]).toEqual([0]);
   });
 
   it('a few sick vans among healthy peers are still found', () => {

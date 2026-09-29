@@ -33,8 +33,8 @@ def con(tmp_path):
     path = str(tmp_path / "h.parquet").replace("\\", "/")
     c.execute(f"COPY ev TO '{path}' (FORMAT parquet)")
     c.execute(
-        "CREATE TABLE veh AS SELECT * FROM (VALUES ('VANA0000000000001', 6, 1, 10), ('VANB0000000000002', 6, 1, 10)) "
-        "t(vin, model_id, duty_type_id, depot_id)"
+        "CREATE TABLE veh AS SELECT * FROM (VALUES ('VANA0000000000001', 6, 1, 10, 3), ('VANB0000000000002', 6, 1, 10, 3)) "
+        "t(vin, model_id, duty_type_id, depot_id, region_id)"
     )
     c.execute("CREATE TABLE codes AS SELECT * FROM (VALUES ('P0217', 'COOLING'), ('P2463', 'EXHAUST')) t(code, family)")
     c.execute(f"CREATE VIEW src AS SELECT * FROM read_parquet('{path}')")
@@ -57,7 +57,8 @@ def test_vehicle_baselines_are_each_vans_own_normal(con):
 
 def test_cohort_dtc_and_fault_rate(con):
     compute(con, "src")
-    assert con.execute("SELECT vins FROM cb WHERE metric = 'coolant_c'").fetchone()[0] == 2
+    cohorts = con.execute("SELECT region_id, vins FROM cb WHERE metric = 'coolant_c' ORDER BY region_id").fetchall()
+    assert cohorts == [(0, 2), (3, 2)]  # all regions + this region
     fams = dict(con.execute("SELECT family, codes_per_day FROM dtcb WHERE vin = 'VANA0000000000001'").fetchall())
     assert fams == {"COOLING": pytest.approx(0.25), "OTHER": pytest.approx(0.25)}  # 1 code over 4 days each
     rate = con.execute("SELECT codes, vehicle_days, per_1000 FROM fr WHERE family = 'COOLING'").fetchone()

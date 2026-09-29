@@ -13,6 +13,7 @@
     }
   },
   "dependencies": {
-    "pure-rand": "^8.4.2"
+    "pure-rand": "^8.4.2",
+    "zod": "^4.6.5"
   }
 }

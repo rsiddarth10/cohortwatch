@@ -11,3 +11,4 @@ export * from './mess.js';
 export * from './scenario.js';
 export * from './groundtruth.js';
 export * from './canonical/index.js';
+export * from './detect/index.js';

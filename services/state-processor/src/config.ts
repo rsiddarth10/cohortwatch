@@ -48,7 +48,7 @@ export function detectParamsFrom(env: NodeJS.ProcessEnv): DetectParams {
   const pick = <T extends number>(name: string, dflt: T): T => (num(env[name]) ?? dflt) as T;
   const metrics = structuredClone(base.metrics);
   metrics.coolant_c.globalThreshold = pick('GLOBAL_COOLANT_THRESHOLD_C', metrics.coolant_c.globalThreshold ?? 97);
-  metrics.batt_temp_c.globalThreshold = pick('GLOBAL_BATT_TEMP_THRESHOLD_C', metrics.batt_temp_c.globalThreshold ?? 45);
+  metrics.batt_temp_c.globalThreshold = pick('GLOBAL_BATT_TEMP_THRESHOLD_C', metrics.batt_temp_c.globalThreshold ?? 47);
   metrics.coolant_c.hardLimit = pick('COOLANT_LIMIT_C', metrics.coolant_c.hardLimit ?? 110);
   metrics.batt_temp_c.hardLimit = pick('BATT_TEMP_LIMIT_C', metrics.batt_temp_c.hardLimit ?? 60);
   return DetectParamsSchema.parse({

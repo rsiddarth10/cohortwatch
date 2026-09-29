@@ -107,7 +107,7 @@ export const DetectParamsSchema = z.object({
         spikeMax: 20,
         hardLimit: 60,
         runawayMinRatePerH: 0.5,
-        globalThreshold: 45,
+        globalThreshold: 47,
       },
       lv_batt_v: {
         label: '12 V battery',

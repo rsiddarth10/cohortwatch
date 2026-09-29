@@ -152,7 +152,7 @@ services:
       context: .
       dockerfile: services/simulator/Dockerfile
     image: cohortwatch/simulator:dev
-    environment:
+    environment: &sim-env
       SIM_SCALE: ${SIM_SCALE:-100000}
       SIM_SEED: ${SIM_SEED:-cohortwatch-42}
       SIM_WORKERS: ${SIM_WORKERS:-4}
@@ -184,15 +184,11 @@ services:
       # and the evaluation job, never into a detection service (S2-S8).
       - ./data/sim-private:/app/data/sim-private
     depends_on:
-      lake-init:
+      sim-history:
         condition: service_completed_successfully
       topic-init:
         condition: service_completed_successfully
-      db-migrate:
-        condition: service_completed_successfully
       redpanda:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     healthcheck:
       test:
@@ -207,6 +203,45 @@ services:
       retries: 30
       start_period: 900s # first boot seeds 100K vans and writes 7 days of history
     restart: unless-stopped
+
+  sim-history:
+    # One-shot: seed the registry, apply plants, write the 7-day history to the lake (all idempotent), then
+    # exit, so the baselines batch job can run before the live stream and the state processor start.
+    image: cohortwatch/simulator:dev
+    environment: *sim-env
+    command: ['node', 'services/simulator/dist/main.js', 'history']
+    volumes:
+      # the simulator itself (plants write ground truth); never mounted into detection services
+      - ./data/sim-private:/app/data/sim-private
+    depends_on:
+      lake-init:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  baselines:
+    # One-shot batch analytics job (S3): each van's normal + fault-rate table from the history lake
+    # (Python 3.12 + DuckDB). Idempotent: skipped when this history was already processed.
+    build:
+      context: batch/baselines
+    image: cohortwatch/baselines:dev
+    environment:
+      DATABASE_URL: postgres://cw_app:${CW_APP_PASSWORD:-cw_app_dev}@postgres:5432/cohortwatch
+      S3_ENDPOINT: http://rustfs:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-cohortwatch}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-cohortwatch-dev-secret}
+      S3_FORCE_PATH_STYLE: 'true'
+      LAKE_BUCKET: cohortwatch-lake
+      DUCKDB_MEMORY: ${BASELINES_MEMORY:-3GB}
+    # NO data/sim-private mount: the job reads the lake and writes as cw_app.
+    depends_on:
+      sim-history:
+        condition: service_completed_successfully
+    restart: 'no'
 
   normaliser:
     build:

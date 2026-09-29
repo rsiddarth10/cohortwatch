@@ -44,6 +44,22 @@ jobs:
       - name: Validate compose file
         run: docker compose config -q
 
+  batch-python:
+    name: batch job (Python 3.12 + DuckDB) unit test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: batch/baselines/requirements.txt
+      - name: Install
+        run: pip install -r batch/baselines/requirements.txt pytest==8.4.2
+      - name: Test
+        working-directory: batch/baselines
+        run: python -m pytest -q
+
   integration:
     name: integration tests (Testcontainers - Redpanda + Redis)
     runs-on: ubuntu-24.04

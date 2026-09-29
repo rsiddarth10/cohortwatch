@@ -60,10 +60,12 @@ Recorded gaps (brief §3): S2 Testcontainers + `/metrics` in every service; S3 T
 
 ## Repo layout
 ```
-packages/domain/      pure logic: VIN, RNG, registry generation, trip + signal model, OEM formats
+packages/domain/      pure logic: VIN, RNG, registry generation, trip + signal model, OEM formats,
+                      canonical/ (S2: canonical event, adapters, validation, anti-replay window, IngestClock)
 packages/common/      config (zod), logging (pino), Kafka producer helper, pg helpers
 services/simulator/   registry seeding + live producer (worker processes own VIN ranges)
-services/{normaliser,state-processor,campaign-engine,api,web,agent}/   later steps (placeholders)
+services/normaliser/  S2: raw → canonical (Avro) + DLQ; per-VIN state in Redis; /metrics, /ledger
+services/{state-processor,campaign-engine,api,web,agent}/   later steps (placeholders)
 infra/db/migrations/  ordered SQL migrations (schemas core + sim, roles)
 infra/kafka/          topic-init script
 tests/                integration / BDD (later)

@@ -25,6 +25,9 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | `prom-client` | Apache-2.0 | Prometheus `/metrics` |
 | `@duckdb/node-api` (DuckDB) | MIT | Writing history and ground truth as Parquet; reading it back in `simulator:verify` |
 | `@aws-sdk/client-s3`, `@aws-sdk/lib-storage` | Apache-2.0 | S3-compatible lake uploads (any endpoint) |
+| `ioredis` | MIT | Normaliser per-VIN anti-replay state (MGET + Lua compare-and-set per batch) |
+| `@kafkajs/confluent-schema-registry` | MIT | Registering the canonical Avro schema (BACKWARD compatibility) |
+| `avsc` | MIT | Avro encoding of canonical events (Confluent wire format) |
 
 ### Development
 
@@ -34,6 +37,7 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | Vitest, `@vitest/coverage-v8` | MIT | Unit tests and coverage |
 | ESLint, `typescript-eslint`, `@eslint/js`, `globals`, `eslint-config-prettier` | MIT | Linting |
 | Prettier | MIT | Formatting |
+| `testcontainers`, `@testcontainers/redpanda` | MIT | Integration tests against real Redpanda + Redis containers (from S2) |
 
 ### Infrastructure images
 

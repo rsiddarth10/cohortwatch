@@ -10,6 +10,7 @@ import { StateMetrics } from './metrics.js';
 import { PartitionState, processBatch, type InEvent } from './processor.js';
 import { RegistryCache } from './registry.js';
 import { IncidentSink } from './sink.js';
+import { TelemetryWriter } from './telemetry.js';
 
 /**
  * S3 state processor: telemetry.canonical.v1 → per-van "vs its own normal, minus peers" → incidents.v1 +
@@ -93,12 +94,12 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
   });
   await producer.connect();
   const sink = new IncidentSink(pool, producer, c.INCIDENT_TOPIC);
-  const telemetry = null as null | {
-    pending(): number;
-    add(p: number, e: InEvent[]): void;
-    dropPartition(p: number): void;
-    close(): Promise<void>;
-  }; // step 6
+  const telemetry =
+    c.TELEMETRY === 'on'
+      ? new TelemetryWriter(pool, c.TELEMETRY_BUCKET_MIN, c.detect, metrics, c.TELEMETRY_FLUSH_MS, (err) =>
+          log.warn({ err: String(err) }, 'telemetry write failed; retrying next round'),
+        )
+      : null;
 
   const topic = c.INPUT_TOPIC;
   const parts = new Map<number, PartitionState>();

@@ -31,7 +31,8 @@
     "normaliser:reconcile": "tsc -b && node services/normaliser/dist/cli/reconcile.js",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "normaliser:bench-cpu": "tsc -b && node services/normaliser/dist/cli/bench-cpu.js",
-    "eval:incidents": "tsc -b && node services/simulator/dist/cli/eval-incidents.js"
+    "eval:incidents": "tsc -b && node services/simulator/dist/cli/eval-incidents.js",
+    "vehicle:normal": "tsc -b && node services/state-processor/dist/cli/vehicle-normal.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

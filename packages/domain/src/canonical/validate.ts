@@ -1,0 +1,179 @@
+import { FAULT_CODES, type FaultFamily } from '../catalog.js';
+import { isValidVin } from '../vin.js';
+import { flag, type CanonicalEvent } from './event.js';
+
+/**
+ * Validation (S2). Rules of thumb:
+ * - An invalid VIN rejects the event (it cannot be attributed to a vehicle) → DLQ INVALID_VIN.
+ * - Everything else keeps the event: a bad field is nulled and flagged, a bad code is dropped and flagged.
+ * Detection (S3) decides what flagged readings mean; the normaliser never guesses a value.
+ */
+
+// ---- DTC → fault family ---------------------------------------------------------------------------
+
+/** OBD-II style: system letter, 0-3, three hex digits (upper case). */
+export const DTC_REGEX = /^[PCBU][0-3][0-9A-F]{3}$/;
+
+const FAMILY_BY_CODE = new Map<string, FaultFamily>(
+  (Object.entries(FAULT_CODES) as [FaultFamily, readonly string[]][]).flatMap(([fam, codes]) =>
+    codes.map((c) => [c, fam] as [string, FaultFamily]),
+  ),
+);
+
+/** Family for a valid code: exact table first; any other valid code is OTHER (never guessed from a prefix). */
+export function faultFamilyOf(code: string): FaultFamily | 'OTHER' {
+  return FAMILY_BY_CODE.get(code) ?? 'OTHER';
+}
+
+// ---- Physical ranges ------------------------------------------------------------------------------
+
+type RangedField =
+  | 'lat'
+  | 'lon'
+  | 'speed_kmh'
+  | 'odo_km'
+  | 'ambient_c'
+  | 'coolant_c'
+  | 'rpm'
+  | 'batt_temp_c'
+  | 'soc_pct'
+  | 'fuel_pct'
+  | 'lv_batt_v'
+  | 'idle_s';
+
+export interface ValidationConfig {
+  /** Inclusive physical limits; outside → field nulled + OUT_OF_RANGE:<field>. */
+  ranges: Record<RangedField, readonly [number, number]>;
+}
+
+export const DEFAULT_VALIDATION: ValidationConfig = {
+  ranges: {
+    lat: [-90, 90],
+    lon: [-180, 180],
+    speed_kmh: [0, 200],
+    odo_km: [0, 2_000_000],
+    ambient_c: [-50, 60],
+    coolant_c: [-40, 150],
+    rpm: [0, 8000],
+    batt_temp_c: [-40, 90],
+    soc_pct: [0, 100],
+    fuel_pct: [0, 100],
+    lv_batt_v: [6, 18],
+    idle_s: [0, 86_400],
+  },
+};
+
+export type ValidationResult = { ok: true; event: CanonicalEvent } | { ok: false; code: 'INVALID_VIN'; detail: string };
+
+/** Stateless checks: VIN, ranges, DTCs. Returns a new event; the input is not modified. */
+export function validateEvent(ev: CanonicalEvent, cfg: ValidationConfig = DEFAULT_VALIDATION): ValidationResult {
+  if (!isValidVin(ev.vin)) return { ok: false, code: 'INVALID_VIN', detail: `invalid VIN "${ev.vin}"` };
+  const out: CanonicalEvent = { ...ev, quality_flags: [...ev.quality_flags] };
+  for (const [field, [lo, hi]] of Object.entries(cfg.ranges) as [RangedField, readonly [number, number]][]) {
+    const v = out[field];
+    if (v !== null && (v < lo || v > hi)) {
+      out[field] = null;
+      out.quality_flags.push(flag('OUT_OF_RANGE', field));
+    }
+  }
+  const dtc: string[] = [];
+  const families: CanonicalEvent['fault_families'] = [];
+  for (const code of ev.dtc) {
+    if (DTC_REGEX.test(code)) {
+      dtc.push(code);
+      families.push(faultFamilyOf(code));
+    } else {
+      out.quality_flags.push(flag('INVALID_DTC'));
+    }
+  }
+  out.dtc = dtc;
+  out.fault_families = families;
+  return { ok: true, event: out };
+}
+
+// ---- Impossible jumps (needs the previous reading of the same VIN) ---------------------------------
+
+/** The newest accepted reading of a VIN: what jump checks compare against. */
+export interface LastReading {
+  seq: number;
+  odoKm: number | null;
+  socPct: number | null;
+}
+
+/** SoC must rise by more than this (percentage points) while driving to count as impossible. */
+export const SOC_RISE_TOLERANCE_PCT = 0.5;
+/** Odometer rounding tolerance (km). */
+export const ODO_TOLERANCE_KM = 0.01;
+
+/**
+ * Compare a reading with the VIN's newest earlier reading. Only readings newer than `prev` are compared
+ * (a late reading is older than prev, so a lower odometer is expected). A flagged value is nulled and
+ * NOT carried into the next state, so one glitch does not make the following good reading look wrong.
+ */
+export function checkJumps(
+  prev: LastReading | undefined,
+  ev: CanonicalEvent,
+): { event: CanonicalEvent; next: LastReading | undefined } {
+  if (prev && ev.seq <= prev.seq) return { event: ev, next: prev };
+  const out: CanonicalEvent = { ...ev, quality_flags: [...ev.quality_flags] };
+  if (prev?.odoKm != null && out.odo_km !== null && out.odo_km < prev.odoKm - ODO_TOLERANCE_KM) {
+    out.odo_km = null;
+    out.quality_flags.push(flag('ODOMETER_BACKWARDS'));
+  }
+  const driving = out.ignition && !out.charging && (out.speed_kmh ?? 0) > 0;
+  if (driving && prev?.socPct != null && out.soc_pct !== null && out.soc_pct > prev.socPct + SOC_RISE_TOLERANCE_PCT) {
+    out.soc_pct = null;
+    out.quality_flags.push(flag('SOC_RISING_WHILE_DRIVING'));
+  }
+  const next: LastReading = {
+    seq: out.seq,
+    odoKm: out.odo_km ?? prev?.odoKm ?? null,
+    socPct: out.soc_pct ?? prev?.socPct ?? null,
+  };
+  return { event: out, next };
+}
+
+// ---- Clock skew -----------------------------------------------------------------------------------
+
+/**
+ * Skew is judged against an event-time watermark (median of recent event times in the same partition),
+ * never against the wall clock: at 360× demo speed, sim time and wall time are not comparable.
+ */
+export const DEFAULT_SKEW_MS = 2 * 60_000;
+
+export function isAheadOfWatermark(
+  eventTsMs: number,
+  watermarkMs: number | null,
+  thresholdMs = DEFAULT_SKEW_MS,
+): boolean {
+  return watermarkMs !== null && eventTsMs - watermarkMs > thresholdMs;
+}
+
+/** Median of the last `size` event times, recomputed every `every` pushes (O(1) amortised per event). */
+export class EventTimeWatermark {
+  private readonly ring: number[] = [];
+  private next = 0;
+  private sinceCompute = 0;
+  private cached: number | null = null;
+
+  constructor(
+    private readonly size = 256,
+    private readonly every = 64,
+  ) {}
+
+  push(ts: number): void {
+    if (this.ring.length < this.size) this.ring.push(ts);
+    else this.ring[this.next] = ts;
+    this.next = (this.next + 1) % this.size;
+    if (++this.sinceCompute >= this.every || this.cached === null) {
+      const s = [...this.ring].sort((a, b) => a - b);
+      this.cached = s[Math.floor(s.length / 2)]!;
+      this.sinceCompute = 0;
+    }
+  }
+
+  /** Current watermark, or null until enough readings were seen to trust it. */
+  value(): number | null {
+    return this.ring.length >= Math.min(this.size, this.every) ? this.cached : null;
+  }
+}

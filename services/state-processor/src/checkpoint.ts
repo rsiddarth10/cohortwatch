@@ -22,7 +22,7 @@ export class CheckpointStore {
     private readonly prefix: string,
     private readonly ttlS: number,
   ) {
-    this.redis = new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 3 });
+    this.redis = new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 3, commandTimeout: 10_000 });
   }
 
   connect(): Promise<void> {

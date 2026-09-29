@@ -27,6 +27,8 @@ export const StateConfigSchema = z.object({
     .default(7 * 24 * 3600),
   /** Registry (depot, model, duty) and baselines are reloaded this often (wall ms). */
   REGISTRY_REFRESH_MS: z.coerce.number().int().min(1000).default(60_000),
+  /** A batch that takes longer than this (wall ms) is treated as a hang: the process exits and restarts. */
+  BATCH_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
   /** Pause input while more than this many incident writes are pending. */
   MAX_PENDING_WRITES: z.coerce.number().int().min(1).default(5_000),
   /** Telemetry writer: on/off, bucket size in sim-minutes, flush interval (wall ms). */

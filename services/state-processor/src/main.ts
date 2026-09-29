@@ -72,7 +72,15 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
   let healthy = false;
   const server = metrics.serve(c.METRICS_PORT, () => healthy, { '/stats': () => stats });
 
-  const pool = new pg.Pool({ connectionString: c.DATABASE_URL, max: 6 });
+  // Timeouts everywhere: a call that hangs on a dead connection must fail (and be retried or crash the process),
+  // never stall a partition forever. Found in the 100K run after a Docker network glitch.
+  const pool = new pg.Pool({
+    connectionString: c.DATABASE_URL,
+    max: 6,
+    connectionTimeoutMillis: 10_000,
+    query_timeout: 60_000,
+    keepAlive: true,
+  });
   const registry = new RegistryCache(pool);
   await retry('registry load', () => registry.load(), 30);
   log.info(
@@ -117,16 +125,19 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
     let l = loading.get(p);
     if (!l) {
       l = (async () => {
-        const ps = new PartitionState();
-        const ck = await retry('checkpoint load', () => store.load(topic, p));
-        if (ck) {
-          for (const [vin, st] of Object.entries(ck.vans)) ps.vans.set(vin, st);
-          ps.offset = ck.offset;
+        try {
+          const ps = new PartitionState();
+          const ck = await retry('checkpoint load', () => store.load(topic, p));
+          if (ck) {
+            for (const [vin, st] of Object.entries(ck.vans)) ps.vans.set(vin, st);
+            ps.offset = ck.offset;
+          }
+          log.info({ partition: p, vans: ps.vans.size, offset: ps.offset }, 'partition state loaded');
+          parts.set(p, ps);
+          return ps;
+        } finally {
+          loading.delete(p); // a failed load is retried by the next batch, never cached
         }
-        log.info({ partition: p, vans: ps.vans.size, offset: ps.offset }, 'partition state loaded');
-        parts.set(p, ps);
-        loading.delete(p);
-        return ps;
       })();
       loading.set(p, l);
     }
@@ -258,9 +269,14 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
       if (batch.messages.length === 0) return;
       const end = metrics.batchSeconds.startTimer();
       const p = batch.partition;
-      const ps = await partition(p);
       const last = batch.messages[batch.messages.length - 1]!.offset;
+      // watchdog: a batch that neither finishes nor fails in BATCH_TIMEOUT_MS is a hang; crash-only recovers it
+      const watchdog = setTimeout(() => {
+        log.fatal({ partition: p, timeoutMs: c.BATCH_TIMEOUT_MS }, 'batch stuck; exiting');
+        (hooks.onFatal ?? (() => process.exit(1)))(new Error('batch timeout'));
+      }, c.BATCH_TIMEOUT_MS);
       try {
+        const ps = await partition(p);
         await ps.run(async () => {
           if (c.ENCODING === 'avro') await decoder.load(decoder.unknownIds(batch.messages.map((m) => m.value)));
           const events: InEvent[] = [];
@@ -309,6 +325,8 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
         log.fatal({ partition: p, err: String(err) }, 'batch failed after retries; exiting');
         (hooks.onFatal ?? (() => process.exit(1)))(err);
         return;
+      } finally {
+        clearTimeout(watchdog);
       }
       // A pause() (our back-pressure) also marks batches stale; only a revoke means the position must not move.
       if (isStale() && !owned(p)) return;

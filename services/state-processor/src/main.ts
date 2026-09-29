@@ -52,6 +52,8 @@ function header(h: KafkaJS.IHeaders | undefined, name: string): string | undefin
 /** Test seams (integration test): fault injection after a batch is fully applied and written. */
 export interface StateHooks {
   afterBatch?: (b: { partition: number; lastOffset: string }) => void | Promise<void>;
+  /** A batch failed after retries. Default: exit the process (crash-only). */
+  onFatal?: (err: unknown) => void;
 }
 
 export interface RunningStateProcessor {
@@ -59,6 +61,8 @@ export interface RunningStateProcessor {
   /** Write every partition's checkpoint and commit (e.g. before a planned stop). */
   checkpointAll(): Promise<void>;
   stop(): Promise<void>;
+  /** Emulate a crash: disconnect without writing checkpoints or committing (tests). */
+  kill(): Promise<void>;
 }
 
 export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}): Promise<RunningStateProcessor> {
@@ -103,6 +107,7 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
 
   const topic = c.INPUT_TOPIC;
   const parts = new Map<number, PartitionState>();
+  let crashing = false;
   const loading = new Map<number, Promise<PartitionState>>();
   const processed = new Map<number, bigint>();
 
@@ -151,6 +156,7 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
     'js.consumer.max.batch.size': 2000,
     rebalance_cb: async (err: { code: number }, assignment: { topic: string; partition: number }[]) => {
       if (err.code === ERR_REVOKE) {
+        if (crashing) return; // crash emulation: a dead process writes nothing
         for (const a of assignment) {
           const ps = parts.get(a.partition);
           if (a.topic !== topic || !ps) continue;
@@ -301,7 +307,8 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
         // crash-only: the restart reloads the checkpoint and replays from the committed offset
         metrics.batchErrors.inc();
         log.fatal({ partition: p, err: String(err) }, 'batch failed after retries; exiting');
-        process.exit(1);
+        (hooks.onFatal ?? (() => process.exit(1)))(err);
+        return;
       }
       // A pause() (our back-pressure) also marks batches stale; only a revoke means the position must not move.
       if (isStale() && !owned(p)) return;
@@ -316,12 +323,15 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
     'state processor running',
   );
 
-  const stop = async () => {
+  const stop = async (crash = false) => {
     healthy = false;
     for (const t of [refreshTimer, ckTimer, bpTimer, lagTimer]) clearInterval(t);
-    log.info('shutting down');
-    await checkpointAll('stop').catch(() => undefined);
-    await telemetry?.close().catch(() => undefined);
+    log.info({ crash }, 'shutting down');
+    crashing = crash;
+    if (!crash) {
+      await checkpointAll('stop').catch(() => undefined);
+      await telemetry?.close().catch(() => undefined);
+    } else telemetry?.abort();
     await consumer.disconnect().catch(() => undefined);
     await producer.disconnect().catch(() => undefined);
     await admin.disconnect().catch(() => undefined);
@@ -329,7 +339,7 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
     await pool.end().catch(() => undefined);
     await new Promise((r) => server.close(r));
   };
-  return { stats, checkpointAll: () => checkpointAll('stop'), stop };
+  return { stats, checkpointAll: () => checkpointAll('stop'), stop: () => stop(false), kill: () => stop(true) };
 }
 
 // Run only when executed directly (`node dist/main.js`), not when imported by a test.

@@ -196,6 +196,12 @@ export class TelemetryWriter {
     }
   }
 
+  /** Crash emulation: stop flushing, keep nothing. */
+  abort(): void {
+    clearInterval(this.timer);
+    this.queue = [];
+  }
+
   async close(): Promise<void> {
     clearInterval(this.timer);
     for (const [p, open] of this.open) {

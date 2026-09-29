@@ -17,7 +17,7 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | Package | License | Why |
 |---|---|---|
 | `@confluentinc/kafka-javascript` (librdkafka) | MIT | Kafka producer: idempotent, acks=all, zstd |
-| `pg`, `pg-copy-streams` | MIT | Postgres client; bulk `COPY` for registry seeding |
+| `pg`, `pg-copy-streams` | MIT | Postgres client; bulk `COPY` for registry seeding and the telemetry writer (S3) |
 | `pure-rand` | MIT | Seeded PRNG (xoroshiro128+) for deterministic simulation |
 | `pino` | MIT | Structured JSON logging |
 | `zod` | MIT | Config validation |
@@ -27,7 +27,15 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | `@aws-sdk/client-s3`, `@aws-sdk/lib-storage` | Apache-2.0 | S3-compatible lake uploads (any endpoint) |
 | `ioredis` | MIT | Normaliser per-VIN anti-replay state (MGET + Lua compare-and-set per batch) |
 | `@kafkajs/confluent-schema-registry` | MIT | Registering the canonical Avro schema (BACKWARD compatibility) |
-| `avsc` | MIT | Avro encoding of canonical events (Confluent wire format) |
+| `avsc` | MIT | Avro encoding of canonical events (Confluent wire format); decoding in the state processor with the writer schema fetched by id (S3) |
+
+### Batch jobs (Python, S3)
+
+| Library | License | Why |
+|---|---|---|
+| `duckdb` 1.5.5 (+ `httpfs`, `postgres` extensions) | MIT | Baselines job: reads the history Parquet from the lake and the registry from Postgres, aggregates in SQL |
+| `psycopg[binary]` 3.2.10 | LGPL-3.0 | Baselines job: one-transaction COPY into Postgres |
+| `pytest` 8.4.2 | MIT | Unit test of the baselines job (CI) |
 
 ### Development
 
@@ -50,6 +58,7 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | RustFS `1.0.0` | Apache-2.0 | S3-compatible object store for the Parquet lake |
 | AWS CLI `2.37.4` | Apache-2.0 | One-shot bucket creation (`lake-init`) |
 | Node.js `22.23.3-bookworm-slim` | MIT | Service runtime |
+| Python `3.12.11-slim-bookworm` | PSF-2.0 | Runtime of the baselines batch job (S3) |
 
 ### CI
 

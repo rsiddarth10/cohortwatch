@@ -61,7 +61,7 @@ jobs:
         run: python -m pytest -q
 
   integration:
-    name: integration tests (Testcontainers - Redpanda + Redis)
+    name: integration tests (Testcontainers - Redpanda + Redis + TimescaleDB)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

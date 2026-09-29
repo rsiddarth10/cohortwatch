@@ -101,8 +101,9 @@ export const DetectParamsSchema = z.object({
         label: 'battery temperature',
         unit: '°C',
         direction: 1,
-        minMad: 0.5,
-        minSlopeMad: 0.05,
+        // wider floors than coolant: charging heat lingers after unplugging, which 12-h window means smooth away
+        minMad: 1.0,
+        minSlopeMad: 0.15,
         maxRatePerMin: 2,
         spikeMax: 20,
         hardLimit: 60,

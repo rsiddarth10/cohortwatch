@@ -40,6 +40,8 @@ interface Args {
   mode: Mode;
   reset: boolean;
   burst: boolean;
+  /** Bench: leave bench.raw.v1 filled (for a downstream drain test); its 10-min retention clears it. */
+  keep: boolean;
   durationS: number;
   days: number | null;
   intervalMin: number | null;
@@ -57,6 +59,7 @@ export function parseArgs(argv: string[], defaultMode: 'demo' | 'live'): Args {
     mode,
     reset: flag('reset'),
     burst: flag('burst'),
+    keep: flag('keep'),
     durationS: value('duration') ?? 120,
     days: value('days'),
     intervalMin: value('interval-min'),
@@ -450,6 +453,10 @@ async function runBench(cfg: SimulatorConfig, world: World, args: Args, log: Log
     'bench result',
   );
   // bench data has no value after the run; clearing it keeps the laptop disk free (pre-approved deletion)
+  if (args.keep) {
+    log.info({ topic: BENCH_TOPIC }, 'bench topic kept (--keep); retention clears it within 10 min');
+    return;
+  }
   const cleared = await clearTopic(cfg.kafka.brokers, BENCH_TOPIC);
   log.info({ topic: BENCH_TOPIC, partitions: cleared }, 'bench topic cleared');
 }

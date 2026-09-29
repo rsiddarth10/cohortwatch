@@ -220,11 +220,12 @@ services:
       INPUT_TOPICS: ${NORMALISER_INPUT_TOPICS:-raw.oem-a.v1,raw.oem-b.v1}
       OUTPUT_TOPIC: ${NORMALISER_OUTPUT_TOPIC:-telemetry.canonical.v1}
       GROUP_ID: ${NORMALISER_GROUP_ID:-cg.normaliser}
+      STATE_PREFIX: ${NORMALISER_STATE_PREFIX:-ar}
       ENCODING: ${NORMALISER_ENCODING:-avro}
       # event-time ms per wall ms, for the clock-skew check: the simulator's demo speed (set 1 for SIM_MODE=live)
       INGEST_CLOCK_SPEED: ${NORMALISER_CLOCK_SPEED:-360}
       BATCH_SIZE: ${NORMALISER_BATCH_SIZE:-2000}
-      CONCURRENCY: ${NORMALISER_CONCURRENCY:-8}
+      CONCURRENCY: ${NORMALISER_CONCURRENCY:-48}
       METRICS_PORT: 9465
       LOG_LEVEL: ${LOG_LEVEL:-info}
     # Stateless (per-VIN state lives in Redis): scale with NORMALISER_REPLICAS, up to the input partition

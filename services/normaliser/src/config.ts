@@ -21,9 +21,9 @@ export const NormaliserConfigSchema = z.object({
   /** Max records per eachBatch call (per partition). */
   BATCH_SIZE: z.coerce.number().int().min(1).max(100_000).default(2000),
   /** Partitions processed concurrently by one replica. */
-  CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
+  CONCURRENCY: z.coerce.number().int().min(1).max(64).default(48),
   /** Pause consumption when more produced-but-unacknowledged events are in flight than this. */
-  MAX_INFLIGHT_EVENTS: z.coerce.number().int().min(1).default(50_000),
+  MAX_INFLIGHT_EVENTS: z.coerce.number().int().min(1).default(200_000),
   /**
    * Pause consumption when the Redis round trip (EWMA) exceeds this. Measured from Node, so it includes
    * event-loop delay: it also backs off when the process itself is starved of CPU.
@@ -39,6 +39,8 @@ export const NormaliserConfigSchema = z.object({
     .int()
     .min(60)
     .default(7 * 24 * 3600),
+  /** Redis key prefix for per-VIN state (bench runs use their own so they never touch the demo's state). */
+  STATE_PREFIX: z.string().default('ar'),
   METRICS_PORT: z.coerce.number().int().default(9465),
   LOG_LEVEL: z.string().default('info'),
   /** Start from the earliest offset when the group has no committed offset. */

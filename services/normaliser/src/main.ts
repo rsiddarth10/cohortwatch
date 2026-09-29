@@ -73,7 +73,7 @@ export async function startNormaliser(c: NormaliserConfig, hooks: NormaliserHook
   let healthy = false;
   const server = metrics.serve(c.METRICS_PORT, () => healthy, { '/ledger': () => ledger });
 
-  const store = new StateStore(c.REDIS_URL, c.STATE_TTL_S);
+  const store = new StateStore(c.REDIS_URL, c.STATE_TTL_S, c.STATE_PREFIX);
   await store.connect();
   const schemaId = c.ENCODING === 'avro' ? await registerWithRetry(c.SCHEMA_REGISTRY_URL) : 0;
   const encode = (ev: CanonicalEvent): Buffer =>
@@ -136,6 +136,7 @@ export async function startNormaliser(c: NormaliserConfig, hooks: NormaliserHook
     void (async () => {
       try {
         const owned = consumer.assignment();
+        metrics.lag.reset(); // only partitions this replica owns now (not ones lost in a rebalance)
         for (const topic of new Set(owned.map((a) => a.topic))) {
           const offsets = await admin.fetchTopicOffsets(topic);
           for (const o of offsets) {

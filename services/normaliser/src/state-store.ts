@@ -2,12 +2,11 @@ import { decodeVinState, encodeVinState, type VinState } from '@cw/domain';
 import { Redis } from 'ioredis';
 
 /**
- * Per-VIN normaliser state in Redis: key `ar:{vin}` → 168-byte VinState (replay window + last reading).
+ * Per-VIN normaliser state in Redis: key `ar:{vin}` (prefix configurable) → 169-byte VinState (replay window +
+ * last reading).
  * One MGET per batch to read; one Lua call per batch to write back with compare-and-set, so a replica that
  * lost the partition in a rebalance cannot overwrite the new owner's newer state. No per-message round trips.
  */
-
-const KEY = (vin: string) => `ar:{${vin}}`;
 
 // KEYS = state keys; ARGV[1] = TTL seconds, then (expected, new) pairs. Expected "" = key must be absent.
 // Returns the 1-based indexes of keys whose current value no longer matched (conflicts, left untouched).
@@ -38,10 +37,14 @@ export class StateStore {
   /** States that could not be decoded (format change) and were treated as new. */
   undecodable = 0;
 
+  private readonly key: (vin: string) => string;
+
   constructor(
     url: string,
     private readonly ttlS: number,
+    prefix = 'ar',
   ) {
+    this.key = (vin) => `${prefix}:{${vin}}`;
     this.redis = new Redis(url, { maxRetriesPerRequest: 3, enableAutoPipelining: false, lazyConnect: true });
   }
 
@@ -54,7 +57,7 @@ export class StateStore {
     const states = new Map<string, VinState | undefined>();
     const raw = new Map<string, Buffer | null>();
     if (vins.length === 0) return { states, raw };
-    const values = await this.redis.mgetBuffer(...vins.map(KEY));
+    const values = await this.redis.mgetBuffer(...vins.map(this.key));
     vins.forEach((vin, i) => {
       const v = values[i] ?? null;
       raw.set(vin, v);
@@ -79,7 +82,7 @@ export class StateStore {
     for (const vin of vins) {
       args.push(read.raw.get(vin) ?? '', Buffer.from(encodeVinState(next.get(vin)!)));
     }
-    const keys = vins.map(KEY);
+    const keys = vins.map(this.key);
     let conflicts: number[];
     try {
       conflicts = (await this.redis.evalsha(this.sha!, vins.length, ...keys, ...args)) as number[];

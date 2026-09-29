@@ -96,7 +96,7 @@ services remember sequence numbers, so replaying from T0 into an existing stack 
 | `AUTO_REPAIRS` | off | `on` repairs the S1 sisters at ~T0+30 h for unattended demos |
 | `DEPOT_TRANSFER` | off | `on` moves 2 S1 sisters to another depot at T0+30 h |
 | `GLOBAL_COOLANT_THRESHOLD_C` / `GLOBAL_BATT_TEMP_THRESHOLD_C` | 97 / 47 | simple global thresholds, used only by checks #10/#11 and the S9 baseline |
-| `LAPTOP_RETENTION` / `KAFKA_PARTITION_BYTES` | on / 67108864 | laptop disk caps on the high-volume topics (see [Disk](#disk)) |
+| `LAPTOP_RETENTION` / `KAFKA_PARTITION_BYTES` / `BENCH_PARTITION_BYTES` | on / 268435456 / 16777216 | disk caps on the high-volume and bench topics (see [Disk](#disk)) |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `LAKE_BUCKET` | RustFS in compose | any S3-compatible store works |
 
 ### Clean reset
@@ -110,19 +110,24 @@ docker compose up -d
 ## Disk
 
 A 100K-van demo writes about 18K msgs/s on average to the raw topics (measured: ~80 B per message on disk after zstd,
-≈ 5 GB/hour uncapped), so on a laptop Kafka is capped:
+≈ 5 GB/hour uncapped), so Kafka is capped by default (`LAPTOP_RETENTION=on`):
 
-- `LAPTOP_RETENTION=on` (default): raw and canonical topics keep 6 h **and** at most `KAFKA_PARTITION_BYTES`
-  (default 64 MiB) per partition, in 16 MiB segments (closed after 10 min if idle), and Redpanda preallocates 1 MiB
-  per partition instead of 32 MiB (≈ 6.4 GB of empty files across 201 partitions otherwise). At demo rate one raw partition holds about **36 wall-minutes**
-  (measured: ~384 msgs/s × ~80 B per partition). A consumer that is stopped for longer than that loses the oldest data; fine for
-  local dev, not for production (`LAPTOP_RETENTION=off` = the brief's 3 days).
-- Worst case on disk: (cap + one open segment) × partitions = 80 MiB × 48 raw ≈ **3.8 GB** today, ≈ **7.5 GB** once
-  `telemetry.canonical.v1` fills from S2. `bench.raw.v1` can add up to 3.8 GB during a bench run; the simulator clears
-  it when the run ends (logically at once; Redpanda frees the files within ~20 min, measured 4.6 GB → 1 MB).
-- Planned: raise `KAFKA_PARTITION_BYTES` to 256–512 MiB once Docker's disk image moves to the larger D: drive.
+- **Raw and canonical topics:** 6 h **and** at most `KAFKA_PARTITION_BYTES` (default **256 MiB**) per partition, in
+  16 MiB segments (closed after 10 min if idle). At demo rate one raw partition holds about **2.4 wall-hours**
+  (measured ~384 msgs/s × ~80 B per partition). A consumer stopped for longer loses the oldest data: fine for local
+  dev, not for production (`LAPTOP_RETENTION=off` = the brief's 3 days).
+- **Bench topics** (`bench.raw.v1`, `bench.canonical.v1`): 10 min and `BENCH_PARTITION_BYTES` (16 MiB) per
+  partition in every mode; bench measures throughput and keeps nothing. The simulator also clears `bench.raw.v1`
+  after a run (Redpanda frees the files within ~20 min).
+- Redpanda preallocates 1 MiB per partition instead of 32 MiB in laptop mode (≈ 6.4 GB of empty files otherwise).
+- **Worst case:** (cap + one segment) × partitions = 272 MiB × 48 ≈ **12.8 GiB** for the raw topics, ≈ **25.5 GiB**
+  once `telemetry.canonical.v1` fills (S2), plus ≤ 3 GiB of bench topics during a bench run.
+- **Where it lives:** on the dev machine Docker Desktop's data disk is on `D:\DockerData` (Settings → Resources →
+  Advanced → Disk image location). On a small disk set `KAFKA_PARTITION_BYTES=67108864` (64 MiB → ≈ 3.8 GiB raw).
+- Develop at `SIM_SCALE=5000`; run 100K for done-checks, then `docker compose stop`.
 - Don't run `npm run history:big` on a laptop (≈1B rows, 20–30 GB in the lake).
-- Change the caps: set the env vars (or `.env`), then `docker compose run --rm topic-init` (applies to existing topics).
+- Change the caps: set the env vars (or `.env`), then `docker compose run --rm topic-init` (applies to existing topics;
+  a new segment size takes effect from the next segment).
 
 ## What runs
 

@@ -214,13 +214,15 @@ If a feature does not change **incident, membership or queue rank**, it is out o
 | `audit.v1` | 6 | 90 d | S7 |
 | `workshop.repairs.v1` | 3 | 7 d | 1b (simulator listens), S6 |
 | `bench.raw.v1` | 48 | 10 min | 1b (bench mode only; cleared after each run) |
+| `bench.canonical.v1` | 48 | 10 min | S2 (normaliser bench output only) |
 
 **Amendment (1b, laptop disk caps).** The retention above is the production value and stays so (Helm/K8s, S10).
 The local default is `LAPTOP_RETENTION=on`: `raw.oem-a.v1`, `raw.oem-b.v1`, `telemetry.canonical.v1` and
 `bench.raw.v1` get `retention.ms` = 6 h (bench: 10 min), `retention.bytes` = `KAFKA_PARTITION_BYTES` per partition
-(default 64 MiB), `segment.bytes` = 16 MiB and `segment.ms` = 10 min (Redpanda deletes only closed segments), and the
+(default 64 MiB; **256 MiB from S2**, after Docker's disk moved to a larger drive), `segment.bytes` = 16 MiB and `segment.ms` = 10 min (Redpanda deletes only closed segments), and the
 cluster's `segment_fallocation_step` drops from 32 MiB to 1 MiB (it preallocates that much per partition, even empty). `LAPTOP_RETENTION=off` restores
-the table above. Bench mode writes only to `bench.raw.v1`, never to the raw topics.
+the table above. Bench mode writes only to `bench.raw.v1`, never to the raw topics. **(S2)** Bench topics
+(`bench.raw.v1`, `bench.canonical.v1`) are capped separately by `BENCH_PARTITION_BYTES` (16 MiB) in every mode.
 
 ### 4.2 Database (migrations)
 

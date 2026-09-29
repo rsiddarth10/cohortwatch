@@ -82,7 +82,8 @@ services:
     environment:
       KAFKA_BROKERS: redpanda:9092
       LAPTOP_RETENTION: ${LAPTOP_RETENTION:-on}
-      KAFKA_PARTITION_BYTES: ${KAFKA_PARTITION_BYTES:-67108864}
+      KAFKA_PARTITION_BYTES: ${KAFKA_PARTITION_BYTES:-268435456}
+      BENCH_PARTITION_BYTES: ${BENCH_PARTITION_BYTES:-16777216}
     volumes:
       - ./infra/kafka/topic-init.sh:/scripts/topic-init.sh:ro
     depends_on:

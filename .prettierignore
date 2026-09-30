@@ -10,3 +10,4 @@ test-results
 playwright-report
 docs/eval/*.json
 docs/ml/*.json
+pacts

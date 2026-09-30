@@ -30,7 +30,8 @@ export const QueueParamsSchema = z.object({
   behaviourFullRatio: z.number().positive().default(3),
   /** Bays: slots per bay per day; only items at or above minBayScore take a bay (runaways always do). */
   slotsPerBayPerDay: z.number().int().positive().default(1),
-  minBayScore: z.number().min(0).max(1).default(0.35),
+  /** 0.40: at 0.35 flat heatwave incidents (score 0.35–0.38) took spare bays (S4 tuning, ADR 0014). */
+  minBayScore: z.number().min(0).max(1).default(0.4),
   /** Daily breakdown hazard used for the cost of waiting when no time to limit is known. */
   hazardPerDay: z
     .object({ WARN: z.number().default(0.05), HIGH: z.number().default(0.15), CRITICAL: z.number().default(0.5), member: z.number().default(0.1), atRisk: z.number().default(0.03), notFixed: z.number().default(0.2) })

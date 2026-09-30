@@ -6,7 +6,7 @@ Each van is compared to **its own normal**, minus what its peers in the same con
 persist become incidents with plain-language clues, and incidents that share a cause become one **campaign**
 (fault family × model × duty × depot). Full scope: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
 
-> Status: **step S5** (S4, the queue, is deliberately not built yet). Built so far:
+> Status: **steps S4 + S6** (after S5). Built so far:
 > - a 100,000-vehicle simulator (planted outbreaks, decoys, realistic mess, two OEM formats, 7 days of history in an
 >   S3 lake, private ground truth);
 > - the normaliser (S2);
@@ -14,7 +14,10 @@ persist become incidents with plain-language clues, and incidents that share a c
 >   clues and runaway flags (S3);
 > - the campaign engine, which groups incidents per fault family | model | duty | depot, opens a campaign only when
 >   ≥ 5 vans is far more than chance (Poisson, against the same cohort elsewhere in the region), flags at-risk
->   sisters, and explains itself (firmware clue, similar past campaigns, cost if not fixed) (S5).
+>   sisters, and explains itself (firmware clue, similar past campaigns, cost if not fixed) (S5);
+> - the workshop service: each depot's ranked queue for today's and tomorrow's bays, with reasons and the cost of
+>   waiting, runaway cards, and fix confirmation after a repair (fixed ✓ / not fixed / pending) that closes a
+>   campaign only when all its members are fixed (S4 + S6).
 >
 > On the S3 scorecard (N = 5,000): it catches the same real faults as a global threshold (35/35) with 4.1 vs 126
 > false incidents per 1,000 healthy vans. Queue, campaigns, API and UI come in later steps.
@@ -151,6 +154,7 @@ Every choice and timing is in `sim.scenario_manifest`. Ground truth is in `sim.g
 | `npm run normaliser:reconcile [-- --seconds 300]` | Over a window, checks raw in = canonical out + DLQ + duplicates dropped (in/out/DLQ counted in Kafka via the `x-src-*` headers; duplicates from the normaliser's `/ledger`). With several replicas pass `--ledger http://localhost:9465/ledger,http://localhost:9466/ledger` |
 | `npm run eval:incidents` | S3 scorecard (an evaluation tool, runs as `cw_sim`): per ground-truth role, vans flagged by the state processor vs by the simple global threshold, onset → incident hours for both, runaway hours of warning, background false incidents per 1,000 vans. Against the compose stack: `SIM_SCALE=100000 npm run eval:incidents` |
 | `npm run eval:campaigns` | S5 scorecard (runs as `cw_sim`): S1 = 1 campaign, S1b separate, late sisters at-risk before their own incident (lead h), decoys/heatwave/background 0, firmware clue vs the plant, early warning, member counting. Prints the **produced horizon** first. Against the compose stack: `SIM_SCALE=<N> npm run eval:campaigns` |
+| `npm run eval:workshop` | S4 + S6 scorecard (runs as `cw_sim`): queue precision@k vs loudest-first at the S1 depot and fleet-wide (point-in-time snapshot at T0+29 h, `EVAL_AT_H`), loud-but-stable vs the S1 sisters, runaway rank and critical → top (s), late sisters in the queue before their incident, fix-confirmation confusion table vs ground truth, S1 campaign close, heatwave/naturally-hot in today's bays, cards. Run with `AUTO_REPAIRS=on` to a produced horizon ≥ T0+84 h |
 | `npm run campaign:dismiss -- --id <campaign id> --reason "..."` | "Not an outbreak": sticky until materially worse (+50% or +3 members, or a runaway member) |
 | `npm run vehicle:normal -- --vin <VIN> [--metric coolant_c]` | One van vs its own normal, hourly (the S8 chart query: `core.telemetry_hourly` joined with the van's baseline band) |
 | `npm run test:integration` | Testcontainers tests against real Redpanda + Redis (+ TimescaleDB for the state processor); needs Docker |
@@ -175,6 +179,7 @@ services remember sequence numbers, so replaying from T0 into an existing stack 
 | `GLOBAL_COOLANT_THRESHOLD_C` / `GLOBAL_BATT_TEMP_THRESHOLD_C` | 97 / 47 | simple global thresholds: checks #10/#11, and the shadow rule the state processor runs for the evaluation baseline |
 | `STATE_REPLICAS` | 3 | state-processor replicas (up to 48) |
 | `CAMPAIGN_REPLICAS` / `CAMPAIGN_ALPHA` | 1 / 0.0001 | campaign-engine replicas (the relay runs on one leader); Poisson α |
+| `WORKSHOP_REPLICAS` / `QUEUE_MIN_BAY_SCORE` | 1 / 0.35 | workshop replicas (relay + hourly tick on one leader); minimum score for a bay |
 | `TELEMETRY` / `TELEMETRY_BUCKET_MIN` | on / 60 | telemetry writer on/off; down-sampling bucket in sim-minutes |
 | `DETECT_*`, `RUNAWAY_*`, `DTC_*` | reference plan §9.3–9.5 | detection thresholds (see `services/state-processor/src/config.ts`) |
 | `LAPTOP_RETENTION` / `KAFKA_PARTITION_BYTES` / `BENCH_PARTITION_BYTES` | on / 268435456 / 16777216 | disk caps on the high-volume and bench topics (see [Disk](#disk)) |
@@ -187,6 +192,26 @@ docker compose down -v      # removes containers AND the Postgres, Redpanda and 
 rm -rf data/sim-private     # private ground truth file
 docker compose up -d
 ```
+
+## Reading the workshop queue
+
+```sql
+-- today's and tomorrow's bays at one depot, with the reasons (phrases) and the cost of waiting
+SELECT rank, slot, vin, round(score::numeric, 2) AS score, pinned, cost_text,
+       (SELECT string_agg(r->>'text', '; ') FROM jsonb_array_elements(reasons) r) AS why
+FROM core.queue_item WHERE depot_id = 1 ORDER BY rank LIMIT 12;
+```
+
+- **Rank 1 with `pinned`** is a runaway: it is above every score and always gets a bay. Its card is in
+  `core.alert_card`.
+- **TODAY / TOMORROW** fill the depot's bays (`core.workshop_bay`, 1 slot per bay per day) in rank order. **WAITING**
+  is everything else, including items under the bay threshold (0.35).
+- **The reasons are the "why"**, e.g. "member of COOLING campaign at D-001 (18 vans)", "at-risk: …", "repair on
+  2026-09-29 did not hold", "12 fault codes in the last 24 h". Fault codes are shown but never raise a van's rank.
+- **Repairs:** `npm run sim:repair -- --vin <VIN>` (or `AUTO_REPAIRS=on`) → the van leaves the queue. After ≥ 12
+  driven hours it is judged: `SELECT vin, status, text FROM core.repair`. NOT_FIXED puts it back at the top of its
+  depot's queue.
+- **Point-in-time queues:** `core.queue_snapshot` holds every version.
 
 ## Disk
 
@@ -226,6 +251,7 @@ A 100K-van demo writes about 18K msgs/s on average to the raw topics (measured: 
 | `normaliser` | built from `services/normaliser/Dockerfile` | S2: raw OEM feeds → validated, de-duplicated canonical events (Avro) + DLQ. Stateless (per-VIN state in Redis). **3 replicas by default**; `NORMALISER_REPLICAS=N docker compose up -d normaliser` scales it, up to 48 (the input partition count). Measured: [docs/perf/normaliser.md](docs/perf/normaliser.md). |
 | `state-processor` | built from `services/state-processor/Dockerfile` | S3: canonical events → each van vs its own normal, minus its peers, confirmed 4 of 6 → incidents with plain-language clues (`incidents.v1`, key = family key, and `core.incident`); runaway = critical; down-sampled telemetry (`core.telemetry` hypertable + hourly aggregate). Per-VIN state in memory per partition, checkpointed to Redis (ADR 0005). **3 replicas by default** (`STATE_REPLICAS`). Measured: [docs/perf/state-processor.md](docs/perf/state-processor.md). |
 | `campaign-engine` | built from `services/campaign-engine/Dockerfile` | S5: `incidents.v1` → campaigns per family key (Poisson guard with a regional expected rate, join once, union-find), at-risk sisters, clues (firmware, trend, codes, region, cost), similar past campaigns (pgvector); transactional outbox → `campaign.events.v1`. 1 replica by default. Measured: [docs/perf/campaign-engine.md](docs/perf/campaign-engine.md). |
+| `workshop` | built from `services/workshop/Dockerfile` | S4 + S6: the daily queue per depot (ranked, bays today/tomorrow, reasons, cost of waiting; `core.queue_item` + versioned snapshots → `queue.events.v1`), runaway and campaign cards (`core.alert_card`), repairs from `workshop.repairs.v1` judged on post-repair driven hours (FIXED / NOT_FIXED / PENDING → `workshop.outcomes.v1`). Measured: [docs/perf/workshop.md](docs/perf/workshop.md). |
 
 ## Measured (step 1b)
 

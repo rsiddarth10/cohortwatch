@@ -393,7 +393,7 @@ services:
       # cw_app: detection has no access to schema sim (ground truth)
       DATABASE_URL: postgres://cw_app:${CW_APP_PASSWORD:-cw_app_dev}@postgres:5432/cohortwatch
       GROUP_ID: ${WORKSHOP_GROUP_ID:-cg.workshop}
-      QUEUE_MIN_BAY_SCORE: ${QUEUE_MIN_BAY_SCORE:-0.35}
+      QUEUE_MIN_BAY_SCORE: ${QUEUE_MIN_BAY_SCORE:-0.4}
       METRICS_PORT: 9477
       LOG_LEVEL: ${LOG_LEVEL:-info}
     # S4 queue + S6 fix confirmation. The outbox relay and the hourly (event-time) tick run on the advisory-lock

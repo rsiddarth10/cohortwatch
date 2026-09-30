@@ -134,6 +134,27 @@ describe('queue scoring', () => {
     expect(ranked.find((r) => r.vin === 'V4')!.parts.notFixed).toBe(P.weights.notFixed);
   });
 
+  it('an at-risk-only van counts at a lower weight: never a bay, even with a steep trend', () => {
+    const steep = mergeSignals(
+      [
+        {
+          kind: 'AT_RISK',
+          vin: 'AR',
+          depotId: 1,
+          family: 'COOLING',
+          metric: 'coolant_c',
+          adjDev: 1.5,
+          zSlope: 9,
+          reason: 'r',
+        },
+      ],
+      ctx(),
+    );
+    const [p] = fillBays(rank(steep, P), 5, P);
+    expect(p!.score).toBeLessThan(P.minBayScore);
+    expect(p!.slot).toBe('WAITING');
+  });
+
   it('fills today, then tomorrow, in rank order; low scores wait; a runaway always gets a bay', () => {
     const cands = mergeSignals(
       [

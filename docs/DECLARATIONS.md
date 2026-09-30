@@ -76,3 +76,5 @@ Synthetic only. No real people, vehicles, addresses, OEM data or personal data. 
 **Past campaigns (S5).** The 30 "similar past campaigns" in `core.past_campaign` are **synthetic and fictional**. They are generated deterministically from 13 templates in `packages/domain/src/campaign/similarity.ts`; their codes (`PC-2024-101` …), root causes and resolution notes describe no real recall or supplier. Similarity uses a numeric feature vector and pgvector (part of the TimescaleDB HA image), with no external embedding API.
 
 **Money (S5).** The "cost if not fixed" rates (tow ₹8,000, 3 downtime days × ₹6,000, unplanned-repair premium ₹25,000, planned fix ₹12,000 per van) are illustrative assumptions in config, not market data.
+
+**Queue (S4).** The score weights, the bay threshold and the daily breakdown hazards used for the "cost of waiting" are illustrative assumptions in config (ADR 0014), not fitted to real fleet data. The queue holds no driver ids; behaviour is per van, relative to its duty.

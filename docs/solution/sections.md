@@ -72,6 +72,20 @@ Pure functions in `packages/domain/src/campaign/`; one Postgres transaction per 
 | Override | "Not an outbreak" is sticky; re-raised only when members reach min(+50%, +3) or a member turns runaway | O(1) |
 | Outbox | Campaign change + outbox row in one transaction; the leader's relay publishes to `campaign.events.v1` (id = uuid5(campaign, type, version)) (ADR 0012) | O(events) |
 
+### S4 + S6: workshop queue and fix confirmation (workshop service)
+
+Pure functions in `packages/domain/src/queue/` and `.../repair/`. For a depot with v vans, c candidates and b bays:
+
+| Step | What | Cost |
+|---|---|---|
+| Candidates | One entry per van: open incidents, campaign members, campaign at-risk sisters, solo at-risk (≥ 3 of the last 4 hourly peer-adjusted z ≥ 1.5, or a steep rise), failed repairs. Signals merge; reasons merge | O(v) |
+| Score | 0.35 severity + 0.25 trend (z_slope, time to limit) + 0.20 campaign (log of size; ½ for at-risk) + 0.10 in service tomorrow + behaviour **capped at 0.10** (harsh events per driven hour vs its duty's depot median) + 0.15 if a repair did not hold. The fault-code count is **not** a term (loud-but-stable ranks below quiet-and-worsening). Runaway/critical is **pinned** above every score (ADR 0014) | O(c) |
+| Rank | Pinned by soonest limit, then score, ties by VIN | O(c log c) |
+| Bays | Today's capacity = bays × slots per bay; fill today then tomorrow in rank order with items scoring ≥ 0.35 (runaways always); the rest wait | O(c) |
+| Cost of waiting | P(breakdown before its slot) × breakdown cost: wait / time to limit, else 1 − (1 − daily hazard)^days by severity and role | O(1) per item |
+| Queue versions | A depot's queue is rebuilt on any event for that depot and every sim-hour. A new version (row per item + a snapshot + an outbox row to `queue.events.v1`) only when the order or slots change | O(c) per rebuild |
+| Fix confirmation | After a repair (S3 resets the van's trend, ADR 0016): **FIXED** when ≥ 6 of the last 8 driven hours are inside \|z\| < 2 with ≥ 12 driven hours; **NOT_FIXED** after 24 driven hours or at 48 sim-h; **PENDING** until driven. Judged each sim-hour; outcomes go to `workshop.outcomes.v1`, a NOT_FIXED van returns to the queue with a boost, and a campaign closes when all members are FIXED (ADR 0017) | O(h) per open repair (h ≤ 48 hourly rows) |
+
 ## 11 AI / ML
 
 **Model per van, not one rule for the fleet (S3).** CohortWatch fits a small statistical model to every van and

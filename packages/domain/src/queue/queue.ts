@@ -131,9 +131,12 @@ export function scoreCandidate(c: Candidate, p: QueueParams): Ranked {
   const campaign = Math.max(0, ...c.campaigns.map((x) => (x.role === 'MEMBER' ? 1 : p.atRiskFactor) * norm(x.members)));
   const behaviour =
     c.ctx.behaviourRatio === null ? 0 : clamp01((c.ctx.behaviourRatio - 1) / (p.behaviourFullRatio - 1));
+  // an at-risk-only van (no incident, not a member, no failed repair) counts "at a lower weight" (brief §1.3.1)
+  const atRiskOnly = c.incidents.length === 0 && !c.notFixed && !c.campaigns.some((x) => x.role === 'MEMBER');
+  const f = atRiskOnly ? p.atRiskFactor : 1;
   const parts: ScoreParts = {
-    severity: w.severity * severity,
-    trend: w.trend * trend,
+    severity: w.severity * severity * f,
+    trend: w.trend * trend * f,
     campaign: w.campaign * campaign,
     inService: c.ctx.inServiceTomorrow ? w.inService : 0,
     behaviour: w.behaviourCap * behaviour,

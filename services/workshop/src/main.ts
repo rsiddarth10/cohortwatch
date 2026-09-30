@@ -152,7 +152,7 @@ export async function startWorkshop(c: WorkshopConfig, hooks: WorkshopHooks = {}
     },
   });
   await consumer.connect();
-  await consumer.subscribe({ topics: [c.INCIDENT_TOPIC, c.CAMPAIGN_TOPIC, c.REPAIRS_TOPIC] });
+  await consumer.subscribe({ topics: [c.INCIDENT_TOPIC, c.CAMPAIGN_TOPIC, c.REPAIRS_TOPIC, c.PROPOSALS_TOPIC] });
   const owned = (topic: string, p: number) => consumer.assignment().some((a) => a.topic === topic && a.partition === p);
 
   let paused = false;
@@ -161,7 +161,9 @@ export async function startWorkshop(c: WorkshopConfig, hooks: WorkshopHooks = {}
       .backlog()
       .then((n) => {
         metrics.outboxBacklog.set(n);
-        const topics = [c.INCIDENT_TOPIC, c.CAMPAIGN_TOPIC, c.REPAIRS_TOPIC].map((topic) => ({ topic }));
+        const topics = [c.INCIDENT_TOPIC, c.CAMPAIGN_TOPIC, c.REPAIRS_TOPIC, c.PROPOSALS_TOPIC].map((topic) => ({
+          topic,
+        }));
         if (!paused && n > c.MAX_OUTBOX_BACKLOG) {
           consumer.pause(topics);
           paused = true;
@@ -228,6 +230,24 @@ export async function startWorkshop(c: WorkshopConfig, hooks: WorkshopHooks = {}
             if (r?.changed) {
               stats.versions++;
               metrics.queueVersions.inc();
+            }
+          } else if (batch.topic === c.PROPOSALS_TOPIC) {
+            const e = raw as { type?: string; proposal_id?: string; depot_id?: number | null } | null;
+            if (!e || typeof e.type !== 'string' || typeof e.proposal_id !== 'string') {
+              metrics.consumed.inc({ source: 'proposal', result: 'bad' });
+              continue;
+            }
+            const r = await retry('proposal transaction', () =>
+              workshop.onProposalDecision({ type: e.type!, proposal_id: e.proposal_id!, depot_id: e.depot_id ?? null }),
+            );
+            metrics.consumed.inc({ source: 'proposal', result: r ? 'applied' : 'duplicate' });
+            if (r?.changed) {
+              stats.versions++;
+              metrics.queueVersions.inc();
+              log.info(
+                { depot: r.depotId, proposal: e.proposal_id, type: e.type },
+                'proposal decision applied to the queue',
+              );
             }
           } else {
             const rp = raw as RepairMsg | null;

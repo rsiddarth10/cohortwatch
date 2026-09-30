@@ -492,6 +492,40 @@ services:
       retries: 12
     restart: unless-stopped
 
+  # S8 template agent (no LLM, ADR 0020): notes applied, bookings only as proposals a lead approves.
+  agent:
+    build:
+      context: .
+      dockerfile: services/agent/Dockerfile
+    image: cohortwatch/agent:dev
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      # cw_app: detection data only (no access to schema sim)
+      DATABASE_URL: postgres://cw_app:${CW_APP_PASSWORD:-cw_app_dev}@postgres:5432/cohortwatch
+      AGENT_ENABLED: ${AGENT_ENABLED:-true}
+      QUEUE_MIN_BAY_SCORE: ${QUEUE_MIN_BAY_SCORE:-0.4}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    # NO data/sim-private mount.
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      topic-init:
+        condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:9479/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
 volumes:
   redpanda-data:
   postgres-data:

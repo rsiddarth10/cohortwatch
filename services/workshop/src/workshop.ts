@@ -10,6 +10,7 @@ import {
   rank,
   reasonsOf,
   uuidV5,
+  withBookings,
   type CampaignParams,
   type FixParams,
   type HourlyScore,
@@ -145,6 +146,19 @@ export class Workshop {
         ); // prettier-ignore
       }
       return this.rebuildDepot(c, depotId, Date.parse(e.ts));
+    });
+  }
+
+  /** A lead approved or rejected an agent proposal: rebuild that depot (approved bookings take their slot). */
+  async onProposalDecision(e: { type: string; proposal_id: string; depot_id: number | null }): Promise<Rebuilt | null> {
+    if ((e.type !== 'APPROVED' && e.type !== 'REJECTED') || e.depot_id === null) return null;
+    return this.tx(async (c) => {
+      if (!(await this.firstTime(c, 'proposal', `${e.proposal_id}|${e.type}`))) return null;
+      const r = await c.query<{ ts: Date | null }>(
+        'SELECT as_of_ts AS ts FROM core.queue_version WHERE depot_id = $1',
+        [e.depot_id],
+      );
+      return this.rebuildDepot(c, e.depot_id!, r.rows[0]?.ts?.getTime() ?? Date.now());
     });
   }
 
@@ -369,7 +383,32 @@ export class Workshop {
       };
     };
 
-    const placed = fillBays(rank(mergeSignals(signals, ctx), this.qp), this.registry.baysAt(depotId), this.qp);
+    const bays = this.registry.baysAt(depotId);
+    let placed = fillBays(rank(mergeSignals(signals, ctx), this.qp), bays, this.qp);
+    // lead-approved bookings (S8 proposals) go into their slot first, after runaways
+    const bk = await c.query<{ vin: string; slot: 'TODAY' | 'TOMORROW'; booked_by: string }>(
+      'SELECT vin::text AS vin, slot, booked_by FROM core.queue_booking WHERE depot_id = $1',
+      [depotId],
+    );
+    const bookedBy = new Map(bk.rows.map((b) => [b.vin, b.booked_by]));
+    if (bk.rows.length > 0) {
+      const perDay = bays * this.qp.slotsPerBayPerDay;
+      const rows = placed.map((p) => ({
+        vin: p.vin,
+        rank: p.rank,
+        slot: p.slot,
+        pinned: p.pinned,
+        eligible: p.pinned || p.score >= this.qp.minBayScore,
+      }));
+      const byVin = new Map(placed.map((p) => [p.vin, p]));
+      let waiting = 0;
+      placed = withBookings(rows, new Map(bk.rows.map((b) => [b.vin, b.slot])), perDay).map((b) => ({
+        ...byVin.get(b.vin)!,
+        rank: b.rank,
+        slot: b.slot,
+        waitDays: b.slot === 'TODAY' ? 0 : b.slot === 'TOMORROW' ? 1 : 2 + Math.floor(waiting++ / Math.max(1, perDay)),
+      }));
+    }
     const signature = placed.map((p) => `${p.vin}:${p.rank}:${p.slot}`).join(',');
     const before = await c.query<{ s: string | null }>(
       `SELECT string_agg(vin || ':' || rank || ':' || slot, ',' ORDER BY rank) AS s FROM core.queue_item WHERE depot_id = $1`,
@@ -389,6 +428,8 @@ export class Workshop {
     const snapshot: unknown[] = [];
     for (const p of placed) {
       const reasons = reasonsOf(p);
+      const by = bookedBy.get(p.vin);
+      if (by) reasons.unshift({ type: 'BOOKED', text: `booked by ${by} (approved agent proposal)` });
       const cost = costText(p, this.qp, this.money);
       await c.query(
         `INSERT INTO core.queue_item (depot_id, vin, rank, slot, score, pinned, parts, reasons, cost_inr, cost_text, version)

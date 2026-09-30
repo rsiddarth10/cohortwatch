@@ -146,6 +146,7 @@ beforeAll(async () => {
       'workshop.repairs.v1',
       'queue.events.v1',
       'workshop.outcomes.v1',
+      'agent.proposals.v1',
     ].map((topic) => ({ topic, numPartitions: 2, replicationFactor: 1 })),
   });
   await admin.disconnect();
@@ -250,5 +251,24 @@ describe('workshop against real Redpanda + TimescaleDB', () => {
     expect(await count('SELECT count(*) AS n FROM core.queue_item WHERE depot_id = 10')).toBe((await queue()).length);
     expect(await count(`SELECT count(*) AS n FROM core.outbox WHERE topic = 'workshop.outcomes.v1'`)).toBe(2);
     expect(await count('SELECT version AS n FROM core.queue_version WHERE depot_id = 10')).toBe(versions); // nothing changed
+
+    // S8: a lead-approved booking takes its slot, with the reason
+    await pool.query(
+      `INSERT INTO core.queue_booking (depot_id, vin, slot, booked_by) VALUES (10, $1, 'TODAY', 'lead')`,
+      [LOUD],
+    );
+    await send('agent.proposals.v1', '10', {
+      type: 'APPROVED',
+      proposal_id: '00000000-0000-5000-8000-0000000000aa',
+      depot_id: 10,
+    });
+    await waitFor(async () => (await queue()).find((x) => x.vin === LOUD)?.slot === 'TODAY');
+    const booked = (
+      await pool.query<{ reasons: { type: string; text: string }[] }>(
+        'SELECT reasons FROM core.queue_item WHERE vin = $1',
+        [LOUD],
+      )
+    ).rows[0]!;
+    expect(booked.reasons[0]).toEqual({ type: 'BOOKED', text: 'booked by lead (approved agent proposal)' });
   });
 });

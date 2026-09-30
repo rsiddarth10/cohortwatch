@@ -11,6 +11,8 @@ export const WorkshopConfigSchema = z.object({
   REPAIRS_TOPIC: z.string().default('workshop.repairs.v1'),
   QUEUE_TOPIC: z.string().default('queue.events.v1'),
   OUTCOMES_TOPIC: z.string().default('workshop.outcomes.v1'),
+  /** S8: approved/rejected agent proposals (bookings) → rebuild that depot's queue. */
+  PROPOSALS_TOPIC: z.string().default('agent.proposals.v1'),
   GROUP_ID: z.string().default('cg.workshop'),
   FROM_BEGINNING: z.enum(['true', 'false']).default('true'),
   BATCH_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),

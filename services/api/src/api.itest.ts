@@ -7,6 +7,7 @@ import pg from 'pg';
 import request from 'supertest';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describeFeature, loadFeature } from '@amiceli/vitest-cucumber';
 import { createApp, type LiveEvent } from './app.js';
 import { jwtVerifier, type Role } from './auth.js';
 
@@ -323,5 +324,68 @@ describe('API security and behaviour (real Postgres, RLS as cw_api)', () => {
     server.close();
     expect(text).toContain('event: queue\ndata: {"depot_id":10,"version":5}');
     expect(text).not.toContain('secret');
+  });
+});
+
+// ---- BDD: brief §1.7 item 10 (tests/bdd/api.feature), same container and seed as above ----
+const feature = await loadFeature('tests/bdd/api.feature');
+
+describeFeature(feature, ({ Scenario }) => {
+  Scenario('A viewer cannot see precise locations or drivers', ({ Given, When, Then, And }) => {
+    let body: { depot: Record<string, unknown>; driver: unknown } = { depot: {}, driver: null };
+    Given('a van at depot D-010 with a driver assigned', async () => {
+      // the erasure test above removed driver 100's assignment: assign a fresh driver
+      await admin.query(`INSERT INTO core.driver VALUES (101, 1, 'drv-wren-5')`);
+      await admin.query(
+        `INSERT INTO core.driver_assignment VALUES (101, $1, tstzrange(now() - interval '1 hour', NULL))`,
+        [V1],
+      );
+    });
+    When('a viewer opens the van', async () => {
+      const t = `Bearer ${await token('viewer', 'viewer')}`;
+      body = (await request(app()).get(`/vehicles/${V1}`).set('Authorization', t).expect(200)).body;
+    });
+    Then('the depot shows only its code, region and a coarse geohash', () => {
+      expect(Object.keys(body.depot).sort()).toEqual(['code', 'geohash5', 'id', 'region']);
+    });
+    And('no driver is shown', () => expect(body.driver).toBeNull());
+    When('a lead opens the same van', async () => {
+      const t = `Bearer ${await token('lead', 'lead')}`;
+      body = (await request(app()).get(`/vehicles/${V1}`).set('Authorization', t).expect(200)).body;
+    });
+    Then('the lead sees the depot coordinates and the driver pseudonym', () => {
+      expect(body.depot.lat).toBe(22.5);
+      expect(body.driver).toEqual({ id: 101, pseudonym: 'drv-wren-5' });
+    });
+  });
+
+  Scenario('Every view is audited', ({ Given, When, Then, And }) => {
+    let t = '';
+    let audits = 0;
+    let outbox = 0;
+    Given('a viewer is logged in', async () => {
+      t = `Bearer ${await token('viewer-bdd', 'viewer')}`;
+      audits = await count(`SELECT count(*) AS n FROM core.audit`);
+      outbox = await count(`SELECT count(*) AS n FROM core.outbox WHERE topic = 'audit.v1'`);
+    });
+    When('the viewer opens the depot queue, a campaign and a vehicle chart', async () => {
+      await request(app()).get('/depots/10/queue').set('Authorization', t).expect(200);
+      await request(app()).get(`/campaigns/${C1}`).set('Authorization', t).expect(200);
+      await request(app()).get(`/vehicles/${V1}/normal`).set('Authorization', t).expect(200);
+    });
+    Then('3 audit rows are written with who, role and what was viewed', async () => {
+      expect(await count(`SELECT count(*) AS n FROM core.audit`)).toBe(audits + 3);
+      const rows = await admin.query(
+        `SELECT actor, role, resource FROM core.audit WHERE actor = 'viewer-bdd' ORDER BY id`,
+      );
+      expect(rows.rows.map((r) => `${r.actor}/${r.role}/${r.resource}`)).toEqual([
+        'viewer-bdd/viewer/depot_queue',
+        'viewer-bdd/viewer/campaign',
+        'viewer-bdd/viewer/vehicle_normal',
+      ]);
+    });
+    And('3 audit events wait in the outbox for audit.v1', async () => {
+      expect(await count(`SELECT count(*) AS n FROM core.outbox WHERE topic = 'audit.v1'`)).toBe(outbox + 3);
+    });
   });
 });

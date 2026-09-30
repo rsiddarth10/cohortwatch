@@ -7,7 +7,7 @@ import type { Placed } from './queue.js';
  * Queue reasons (phrases, never scores; the S3/S5 clue style) and the cost of waiting (brief §1.3.1).
  */
 export interface QueueReason {
-  type: 'RUNAWAY' | 'INCIDENT' | 'CAMPAIGN' | 'AT_RISK' | 'NOT_FIXED' | 'CODES' | 'BEHAVIOUR' | 'IN_SERVICE';
+  type: 'RUNAWAY' | 'INCIDENT' | 'CAMPAIGN' | 'AT_RISK' | 'NOT_FIXED' | 'CODES' | 'BEHAVIOUR' | 'IN_SERVICE' | 'BOOKED';
   text: string;
 }
 

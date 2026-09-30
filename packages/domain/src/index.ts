@@ -15,3 +15,4 @@ export * from './detect/index.js';
 export * from './campaign/index.js';
 export * from './queue/index.js';
 export * from './repair/index.js';
+export * from './agent/index.js';

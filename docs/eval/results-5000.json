@@ -1,0 +1,422 @@
+{
+  "scale": 5000,
+  "seed": "cohortwatch-42",
+  "generatedAt": "2026-09-30T17:34:46.882Z",
+  "horizonH": 997,
+  "incidents": {
+    "rows": [
+      {
+        "role": "background",
+        "vans": 4158,
+        "ours": 72,
+        "ours_signal": 72,
+        "ours_dtc": 0,
+        "ours_family": 0,
+        "global": 829,
+        "lag_p50": null,
+        "lag_max": null,
+        "glag_p50": null,
+        "glag_max": null,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "bad_repair",
+        "vans": 1,
+        "ours": 1,
+        "ours_signal": 1,
+        "ours_dtc": 0,
+        "ours_family": 1,
+        "global": 1,
+        "lag_p50": 22.345563333333335,
+        "lag_max": 22.345563333333335,
+        "glag_p50": 27.443549166666667,
+        "glag_max": 27.443549166666667,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "decoy_same_depot_other_model",
+        "vans": 2,
+        "ours": 2,
+        "ours_signal": 2,
+        "ours_dtc": 0,
+        "ours_family": 2,
+        "global": 2,
+        "lag_p50": 24.335141111111113,
+        "lag_max": 29.451986944444446,
+        "glag_p50": 24.668474444444445,
+        "glag_max": 29.951986944444446,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "decoy_scattered",
+        "vans": 6,
+        "ours": 6,
+        "ours_signal": 6,
+        "ours_dtc": 0,
+        "ours_family": 6,
+        "global": 6,
+        "lag_p50": 16.11579125,
+        "lag_max": 22.21636722222222,
+        "glag_p50": 31.685589444444446,
+        "glag_max": 113.50672944444445,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "heatwave_region",
+        "vans": 704,
+        "ours": 27,
+        "ours_signal": 26,
+        "ours_dtc": 1,
+        "ours_family": 0,
+        "global": 593,
+        "lag_p50": null,
+        "lag_max": null,
+        "glag_p50": 17.005639722222224,
+        "glag_max": 46.77847888888889,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "loud_stable",
+        "vans": 20,
+        "ours": 3,
+        "ours_signal": 0,
+        "ours_dtc": 3,
+        "ours_family": 0,
+        "global": 4,
+        "lag_p50": null,
+        "lag_max": null,
+        "glag_p50": null,
+        "glag_max": null,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "naturally_hot",
+        "vans": 38,
+        "ours": 1,
+        "ours_signal": 1,
+        "ours_dtc": 0,
+        "ours_family": 0,
+        "global": 30,
+        "lag_p50": null,
+        "lag_max": null,
+        "glag_p50": null,
+        "glag_max": null,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "runaway",
+        "vans": 1,
+        "ours": 1,
+        "ours_signal": 1,
+        "ours_dtc": 0,
+        "ours_family": 1,
+        "global": 1,
+        "lag_p50": 15.016666666666667,
+        "lag_max": 15.016666666666667,
+        "glag_p50": 14.85,
+        "glag_max": 14.85,
+        "critical": 1,
+        "warn_min": 5.833333333333333,
+        "warn_max": 5.833333333333333
+      },
+      {
+        "role": "s1_healthy_cohort",
+        "vans": 42,
+        "ours": 0,
+        "ours_signal": 0,
+        "ours_dtc": 0,
+        "ours_family": 0,
+        "global": 5,
+        "lag_p50": null,
+        "lag_max": null,
+        "glag_p50": null,
+        "glag_max": null,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "s1_late_sister",
+        "vans": 3,
+        "ours": 3,
+        "ours_signal": 3,
+        "ours_dtc": 0,
+        "ours_family": 3,
+        "global": 3,
+        "lag_p50": 26.83710222222222,
+        "lag_max": 27.874078611111113,
+        "glag_p50": 11.116245,
+        "glag_max": 34.67039916666667,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "s1_sister",
+        "vans": 14,
+        "ours": 14,
+        "ours_signal": 14,
+        "ours_dtc": 0,
+        "ours_family": 14,
+        "global": 13,
+        "lag_p50": 21.946974583333333,
+        "lag_max": 22.615140555555556,
+        "glag_p50": 21.615140555555556,
+        "glag_max": 25.8386225,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "s1b_sister",
+        "vans": 8,
+        "ours": 8,
+        "ours_signal": 8,
+        "ours_dtc": 0,
+        "ours_family": 8,
+        "global": 8,
+        "lag_p50": 13.332973472222221,
+        "lag_max": 14.368678055555556,
+        "glag_p50": 34.650522361111115,
+        "glag_max": 40.007443611111114,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      },
+      {
+        "role": "sensor_glitch",
+        "vans": 3,
+        "ours": 0,
+        "ours_signal": 0,
+        "ours_dtc": 0,
+        "ours_family": 0,
+        "global": 0,
+        "lag_p50": null,
+        "lag_max": null,
+        "glag_p50": null,
+        "glag_max": null,
+        "critical": 0,
+        "warn_min": null,
+        "warn_max": null
+      }
+    ],
+    "total": 154,
+    "signal": 144,
+    "dtc": 10
+  },
+  "campaigns": {
+    "facts": {
+      "horizonH": 931,
+      "opened": 2,
+      "watching": 83,
+      "merged": 0,
+      "s1Campaigns": 1,
+      "s1Recall": 18,
+      "s1Intruders": 0,
+      "s1bCampaigns": 1,
+      "s1bRecall": 8,
+      "s1bSeparate": true,
+      "s1bIntruders": 0,
+      "lateFlagged": 3,
+      "lateTotal": 3,
+      "lateLeadsH": [
+        4.566845,
+        18.251308333333334,
+        19.44517777777778
+      ],
+      "healthyCohortFlagged": 5,
+      "decoysAdmitted": 0,
+      "heatwaveCampaigns": 0,
+      "backgroundCampaigns": 0,
+      "firmwareClue": "14 of 18 got firmware 4.2.1 in the 3 days before onset, vs 38% of healthy sisters (16 of 42)",
+      "earlyWarningH": 24.50109611111111,
+      "memberRows": 140,
+      "uniqueMembers": 140,
+      "outboxRows": 9369,
+      "outboxUnpublished": 0
+    },
+    "checks": [
+      [
+        "S1",
+        "exactly 1 campaign; members ⊆ sisters",
+        "1 campaign(s); 18/18 sisters; 0 non-sisters"
+      ],
+      [
+        "S1b",
+        "exactly 1, separate from S1",
+        "1 campaign(s); 8/8 sisters; separate; 0 non-sisters"
+      ],
+      [
+        "Late sisters",
+        "at-risk before own incident; lead (h)",
+        "3/3 (100%); lead 4.6, 18.3, 19.4 h"
+      ],
+      [
+        "At-risk false positives",
+        "healthy S1 cohort flagged",
+        "5/42"
+      ],
+      [
+        "Decoys",
+        "admitted to any campaign = 0",
+        "0"
+      ],
+      [
+        "Heatwave region",
+        "campaigns = 0",
+        "0"
+      ],
+      [
+        "Background",
+        "campaigns = 0",
+        "0"
+      ],
+      [
+        "Firmware clue",
+        "S1 clue printed; matches the plant",
+        "\"14 of 18 got firmware 4.2.1 in the 3 days before onset, vs 38% of healthy sisters (16 of 42)\" · plant: 16/18 sisters, 20/42 healthy (48%)"
+      ],
+      [
+        "Early warning",
+        "S1 OPEN → first sister limit_ts",
+        "24.5 h (opened T0+28.0 h, limit T0+52.5 h)"
+      ],
+      [
+        "Counting",
+        "members = unique VINs after restarts",
+        "140 member rows = 140 unique (vin, family); outbox 9369 rows, 0 unpublished"
+      ]
+    ]
+  },
+  "workshop": {
+    "facts": {
+      "horizonH": 932,
+      "atH": 29,
+      "depotCode": "D-001",
+      "k": 7,
+      "precisionAtK": 1,
+      "loudestAtK": 0.5714285714285714,
+      "precisionAt50": 0.34,
+      "loudestAt50": 0.04,
+      "loudQueuedEver": 10,
+      "loudTodayEver": 0,
+      "loudAboveSisterEver": 0,
+      "runawayRank": 1,
+      "runawayTopS": 0.009694,
+      "runawayCardH": 28.183333333333334,
+      "runawayLimitH": 34.016666666666666,
+      "lateInQueue": 3,
+      "lateTotal": 3,
+      "lateLeadsH": [
+        31.566845,
+        17.251308333333334,
+        43.44517777777778
+      ],
+      "repairs": 15,
+      "truthFixed": {
+        "FIXED": 14,
+        "NOT_FIXED": 0,
+        "PENDING": 0
+      },
+      "truthNotFixed": {
+        "FIXED": 0,
+        "NOT_FIXED": 1,
+        "PENDING": 0
+      },
+      "badRepairRank": 1,
+      "badRepairReason": "repair on 2026-09-29 did not hold",
+      "s1Status": "OPEN",
+      "s1Fixed": 14,
+      "s1Members": 18,
+      "heatwaveToday": 5,
+      "hotToday": 1,
+      "cards": {
+        "CAMPAIGN_GREW": 16,
+        "CAMPAIGN_OPENED": 2,
+        "RUNAWAY": 1
+      }
+    },
+    "checks": [
+      [
+        "Queue vs loudest-first",
+        "precision@7 at D-001 (today's bays)",
+        "ours 100% vs loudest-first 57%"
+      ],
+      [
+        "",
+        "precision@50 fleet-wide",
+        "ours 34% vs loudest-first 4%"
+      ],
+      [
+        "Loud-but-stable",
+        "none above any S1 sister",
+        "snapshot: 0 of 0 queued loud vans above the lowest S1 sister (0.49); whole run: 10 loud vans ever queued, 0 ever in today's bays, 0 times above an S1 sister at the same depot"
+      ],
+      [
+        "Runaway",
+        "rank 1 in its depot; critical → top (s)",
+        "rank 1 after its card (T0+28.2 h); critical incident written → top of queue 0.01 s; limit T0+34.0 h"
+      ],
+      [
+        "Late sisters",
+        "in the queue (at-risk) before their own incident",
+        "3/3; lead 31.6, 17.3, 43.4 h"
+      ],
+      [
+        "Fix confirmation",
+        "repaired sisters FIXED; bad repair NOT_FIXED",
+        "15 repairs · truth fixed: FIXED 14, NOT_FIXED 0, PENDING 0 · truth not_fixed: FIXED 0, NOT_FIXED 1, PENDING 0"
+      ],
+      [
+        "",
+        "bad repair back in the queue",
+        "rank 1 (TODAY): \"repair on 2026-09-29 did not hold\""
+      ],
+      [
+        "Campaign close",
+        "S1 stays OPEN (bad repair, late sisters)",
+        "OPEN: 14 of 18 fixed"
+      ],
+      [
+        "Heatwave / naturally hot",
+        "not in today's bays",
+        "heatwave 5 vans, naturally hot 1 vans (ever, any snapshot)"
+      ],
+      [
+        "Cards",
+        "runaways and new/growing campaigns only",
+        "CAMPAIGN_GREW 16, CAMPAIGN_OPENED 2, RUNAWAY 1"
+      ]
+    ]
+  },
+  "baseline": {
+    "runawayGlobalWarnH": "9.1666666666666667",
+    "runawayOursWarnH": "5.8333333333333333",
+    "s1GlobalFirstHitToLimitH": "41.5819447222222222",
+    "s1FirstIncidentToLimitH": "25.0130077777777778"
+  },
+  "reconcile": {
+    "ran": true,
+    "balanced": true,
+    "text": "window start: 48 partitions; waiting 60 s ...\nnormaliser reconcile  window 60s  2026-09-30T17:23:49.058Z → 2026-09-30T17:24:49.112Z\npartitions            48\nraw in (committed)    13689\ncanonical out         13442   (distinct source offsets found in telemetry.canonical.v1)\nDLQ                   20   (distinct source offsets found in telemetry.dlq.v1)\nduplicates dropped    227   (normaliser ledger)\ndifference            0   BALANCED",
+    "rawIn": 13689,
+    "out": 13442,
+    "dlq": 20,
+    "dups": 227,
+    "seconds": 60
+  }
+}

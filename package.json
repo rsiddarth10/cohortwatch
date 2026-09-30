@@ -42,7 +42,11 @@
     "vehicle:normal": "tsc -b && node services/state-processor/dist/cli/vehicle-normal.js",
     "campaign:dismiss": "tsc -b && node services/campaign-engine/dist/cli/dismiss.js",
     "eval:campaigns": "tsc -b && node services/simulator/dist/cli/eval-campaigns.js",
-    "eval:workshop": "tsc -b && node services/simulator/dist/cli/eval-workshop.js"
+    "eval:workshop": "tsc -b && node services/simulator/dist/cli/eval-workshop.js",
+    "eval:all": "tsc -b && node services/simulator/dist/cli/eval-all.js",
+    "demo:pause": "tsc -b && node services/simulator/dist/cli/demo.js pause",
+    "demo:resume": "tsc -b && node services/simulator/dist/cli/demo.js resume",
+    "demo:status": "tsc -b && node services/simulator/dist/cli/demo.js status"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

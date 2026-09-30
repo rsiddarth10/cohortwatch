@@ -19,7 +19,11 @@ export type WorkerMessage =
 
 /** Messages from the main process to workers. */
 export type MainMessage =
-  { type: 'start'; wallStartMs: number } | { type: 'repair'; vin: string; repairedAtMs: number };
+  | { type: 'start'; wallStartMs: number }
+  | { type: 'repair'; vin: string; repairedAtMs: number }
+  // S9 video helper: every worker freezes / resumes its clock at the same wall instant as the main process
+  | { type: 'pause'; atWallMs: number }
+  | { type: 'resume'; atWallMs: number };
 
 export const WORKER_INDEX_ENV = 'CW_WORKER_INDEX';
 export const WORKER_MODE_ENV = 'CW_WORKER_MODE';

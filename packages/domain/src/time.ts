@@ -26,8 +26,15 @@ export class LiveClock implements Clock {
  * Scaled simulated clock (step 1b): simulated time starts at `simStartMs` when the wall clock reads
  * `wallStartMs`, then advances `speed` simulated ms per wall ms. Demo mode uses speed 360
  * (1 wall-second = 6 sim-minutes). Workers share (simStart, wallStart, speed), so they agree on "now".
+ *
+ * S9 (video helper): the clock can be paused and resumed at a given wall time. While paused, "now" stands still,
+ * so the simulator produces nothing new and the whole story waits. The main process sends the same wall times to
+ * every worker, so they stay in agreement.
  */
 export class SimClock implements Clock {
+  private pausedAtWall: number | null = null;
+  private pausedTotalMs = 0;
+
   constructor(
     readonly simStartMs: number,
     readonly speed: number,
@@ -37,11 +44,25 @@ export class SimClock implements Clock {
     if (!(speed > 0)) throw new Error('clock speed must be > 0');
   }
   now(): number {
-    return this.simStartMs + (this.wallNow() - this.wallStartMs) * this.speed;
+    const wall = this.pausedAtWall ?? this.wallNow();
+    return this.simStartMs + (wall - this.wallStartMs - this.pausedTotalMs) * this.speed;
   }
-  /** Wall-clock ms at which simulated time `simMs` is reached. */
+  /** Wall-clock ms at which simulated time `simMs` is reached (assuming no further pause). */
   wallAt(simMs: number): number {
-    return this.wallStartMs + (simMs - this.simStartMs) / this.speed;
+    return this.wallStartMs + this.pausedTotalMs + (simMs - this.simStartMs) / this.speed;
+  }
+  get paused(): boolean {
+    return this.pausedAtWall !== null;
+  }
+  /** Freeze "now" as of wall time `atWallMs`. Idempotent. */
+  pause(atWallMs: number = this.wallNow()): void {
+    if (this.pausedAtWall === null) this.pausedAtWall = atWallMs;
+  }
+  /** Continue from where it stood: the paused wall interval is skipped. Idempotent. */
+  resume(atWallMs: number = this.wallNow()): void {
+    if (this.pausedAtWall === null) return;
+    this.pausedTotalMs += Math.max(0, atWallMs - this.pausedAtWall);
+    this.pausedAtWall = null;
   }
 }
 

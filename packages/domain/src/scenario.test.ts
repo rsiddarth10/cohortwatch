@@ -258,4 +258,27 @@ describe('SimClock', () => {
     expect(c.wallAt(T0 + 72 * HOUR_MS)).toBe(1_000 + 720_000);
     expect(() => new SimClock(T0, 0)).toThrow();
   });
+
+  it('pauses (now stands still) and resumes where it stood (video helper)', () => {
+    let wall = 1_000;
+    const c = new SimClock(T0, 360, 1_000, () => wall);
+    wall = 2_000;
+    c.pause();
+    c.pause(); // idempotent
+    expect(c.paused).toBe(true);
+    wall = 60_000;
+    expect(c.now()).toBe(T0 + 6 * MINUTE_MS);
+    c.resume();
+    c.resume(); // idempotent
+    expect(c.paused).toBe(false);
+    expect(c.now()).toBe(T0 + 6 * MINUTE_MS);
+    wall = 61_000;
+    expect(c.now()).toBe(T0 + 12 * MINUTE_MS);
+    expect(c.wallAt(T0 + 12 * MINUTE_MS)).toBe(61_000);
+    // explicit wall times: every worker applies the same instants
+    const w = new SimClock(T0, 360, 1_000, () => 999_999);
+    w.pause(2_000);
+    w.resume(60_000);
+    expect(w.wallAt(T0 + 6 * MINUTE_MS)).toBe(60_000);
+  });
 });

@@ -91,9 +91,19 @@ export class SimMetrics {
     return { msgsPerSec: Math.round(rateSum * 10) / 10, total, byStream };
   }
 
-  serve(port: number, isHealthy: () => boolean, clock: () => object = () => ({})): Server {
+  serve(
+    port: number,
+    isHealthy: () => boolean,
+    clock: () => object = () => ({}),
+    control: (action: 'pause' | 'resume') => object | null = () => null,
+  ): Server {
     const server = createServer((req, res) => {
-      if (req.url === '/metrics') {
+      if (req.method === 'POST' && (req.url === '/clock/pause' || req.url === '/clock/resume')) {
+        // S9 video helper: freeze / resume the sim clock (the producer just stops producing new readings)
+        const out = control(req.url === '/clock/pause' ? 'pause' : 'resume');
+        res.writeHead(out ? 200 : 409, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(out ?? { error: 'clock not started yet' }));
+      } else if (req.url === '/metrics') {
         this.registry
           .metrics()
           .then((body) => {

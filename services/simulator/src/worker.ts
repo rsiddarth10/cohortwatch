@@ -117,13 +117,23 @@ async function stream(cfg: SimulatorConfig): Promise<void> {
   await producer.connect();
 
   const pendingRepairs: { vin: string; repairedAtMs: number }[] = [];
+  let clock: SimClock | null = null;
+  let pausedAt: number | null = null; // a pause that arrives before 'start' is applied at start
   process.on('message', (m: MainMessage) => {
     if (m.type === 'repair') pendingRepairs.push(m);
+    else if (m.type === 'pause') {
+      if (clock) clock.pause(m.atWallMs);
+      else pausedAt = m.atWallMs;
+    } else if (m.type === 'resume') {
+      if (clock) clock.resume(m.atWallMs);
+      else pausedAt = null;
+    }
   });
 
   send({ type: 'ready', worker: index, vehicles: end - start, startupMs: Date.now() - started });
   const { wallStartMs } = await waitFor('start');
-  const clock = new SimClock(simStart, speed, wallStartMs);
+  clock = new SimClock(simStart, speed, wallStartMs);
+  if (pausedAt !== null) clock.pause(Math.max(pausedAt, wallStartMs));
   log.info(
     { vins: [start, end], startupMs: Date.now() - started, simStart: new Date(simStart).toISOString(), speed },
     'worker streaming',

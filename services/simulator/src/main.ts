@@ -206,7 +206,17 @@ async function runStream(cfg: SimulatorConfig, world: World, mode: 'demo' | 'liv
         t0: new Date(t0).toISOString(),
         sinceT0H: (now - t0) / HOUR_MS,
         scenarioEnd: new Date(world.scenario.scenarioEndMs).toISOString(),
+        paused: clock?.paused ?? false,
       };
+    },
+    (action) => {
+      if (!clock) return null;
+      const atWallMs = Date.now();
+      if (action === 'pause') clock.pause(atWallMs);
+      else clock.resume(atWallMs);
+      for (const w of workers) w.send({ type: action, atWallMs } satisfies MainMessage);
+      log.info({ action, sim: sinceT0(world, clock.now()) }, `clock ${action}d`);
+      return { action, paused: clock.paused, simIso: new Date(clock.now()).toISOString() };
     },
   );
 

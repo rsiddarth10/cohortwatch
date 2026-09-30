@@ -8,3 +8,4 @@ docs/*.docx
 *.md
 test-results
 playwright-report
+docs/eval/*.json

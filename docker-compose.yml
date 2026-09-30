@@ -53,6 +53,15 @@ services:
   postgres:
     # TimescaleDB + pgvector image from day one (no switch in S3). Pinned: PG 16.15, TimescaleDB 2.30.1.
     image: timescale/timescaledb-ha:pg16.15-ts2.30.1
+    # S9: pg_stat_statements for query tuning (docs/perf/queries.md)
+    command:
+      [
+        'postgres',
+        '-c',
+        'shared_preload_libraries=timescaledb,pg_stat_statements',
+        '-c',
+        'pg_stat_statements.track=all',
+      ]
     environment:
       <<: *pg-env
     ports:

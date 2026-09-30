@@ -6,7 +6,7 @@ Each van is compared to **its own normal**, minus what its peers in the same con
 persist become incidents with plain-language clues, and incidents that share a cause become one **campaign**
 (fault family × model × duty × depot). Full scope: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
 
-> Status: **steps S7 + S8** (after S4 + S6). Built so far:
+> Status: **step S9** (evaluation, ML, load, tuning, observability) after S7 + S8. **How well it works: [docs/evaluation.md](docs/evaluation.md)** (every claim of brief §6 at 5K and 30K, with the baseline it beats). Built so far:
 > - a 100,000-vehicle simulator (planted outbreaks, decoys, realistic mess, two OEM formats, 7 days of history in an
 >   S3 lake, private ground truth);
 > - the normaliser (S2) and the state processor, which compares each van with its own normal minus its peers and
@@ -19,8 +19,9 @@ persist become incidents with plain-language clues, and incidents that share a c
 >   tenant isolation by Postgres RLS, viewer masking, every view audited, live updates over SSE; a template agent
 >   (no LLM) that cites its evidence and only *proposes* bay changes, which a lead approves; the web board.
 >
-> On the S3 scorecard (N = 5,000): it catches the same real faults as a global threshold (35/35) with 4.1 vs 126
-> false incidents per 1,000 healthy vans.
+> - **S9:** `npm run eval:all` (the evaluation page), a pausable demo clock for the video, an offline at-risk
+>   classifier compared with the rules ([model card](docs/ml/model-card.md)), a batched queue tick, query tuning,
+>   k6 load/soak, chaos checks, Prometheus + Grafana, and a Pact contract web → API.
 
 ## Open the app
 
@@ -186,6 +187,14 @@ Every choice and timing is in `sim.scenario_manifest`. Ground truth is in `sim.g
 | `npm run eval:incidents` | S3 scorecard (an evaluation tool, runs as `cw_sim`): per ground-truth role, vans flagged by the state processor vs by the simple global threshold, onset → incident hours for both, runaway hours of warning, background false incidents per 1,000 vans. Against the compose stack: `SIM_SCALE=100000 npm run eval:incidents` |
 | `npm run eval:campaigns` | S5 scorecard (runs as `cw_sim`): S1 = 1 campaign, S1b separate, late sisters at-risk before their own incident (lead h), decoys/heatwave/background 0, firmware clue vs the plant, early warning, member counting. Prints the **produced horizon** first. Against the compose stack: `SIM_SCALE=<N> npm run eval:campaigns` |
 | `npm run eval:workshop` | S4 + S6 scorecard (runs as `cw_sim`): queue precision@k vs loudest-first at the S1 depot and fleet-wide (point-in-time snapshot at T0+29 h, `EVAL_AT_H`), loud-but-stable vs the S1 sisters, runaway rank and critical → top (s), late sisters in the queue before their incident, fix-confirmation confusion table vs ground truth, S1 campaign close, heatwave/naturally-hot in today's bays, cards. Run with `AUTO_REPAIRS=on` to a produced horizon ≥ T0+84 h |
+| **`npm run eval:all`** | **S9: every claim of brief §6 in one table → [docs/evaluation.md](docs/evaluation.md)** (claim, data, metric, ours, baseline; one column pair per N). Runs the three scorecards below plus a 60 s ingestion reconcile, saves `docs/eval/results-<N>.json`. Best practice: `npm run demo:pause` at ~T0+88 h, `EVAL_RECONCILE=off npm run eval:all`, `npm run demo:resume`, `npm run eval:all -- --reconcile-only`. `-- --render` rebuilds the page from the saved results |
+| `npm run demo:pause` / `demo:resume` | Freeze / resume the simulator's clock (the whole story waits; nothing is lost). For recording the video: [docs/video-runbook.md](docs/video-runbook.md) |
+| `npm run demo:status` | Sim time and which story moments are ready now (S1 open, at-risk sisters, pending proposal, runaway card, FIXED, NOT_FIXED), each with its URL |
+| `docker compose --profile observability up -d prometheus grafana` | Prometheus (:9090) scraping every replica + Grafana (:3001, anonymous viewer) with the provisioned "CohortWatch pipeline" dashboard |
+| `docker compose --profile ml run --rm ml-at-risk export.py /data/<file>.csv.gz` · `… train.py <train> <test> /data/out full\|signals` | S9 at-risk classifier (offline, Python 3.12, runs as `cw_sim`): export a run's van-hours, train on one seed, test on another. [Model card](docs/ml/model-card.md) |
+| `sh tests/load/run.sh load\|soak [sse_seconds]` | k6 (Docker) against the API's queue + campaign endpoints; `soak` = 20 users for 10 min, optionally with 50 SSE clients. Raise `API_RATE_LIMIT_PER_MIN` for the run (one user). [docs/perf/load.md](docs/perf/load.md) |
+| `sh tests/chaos/run.sh` | During a live run: restart Redis, SIGKILL a normaliser and a state-processor replica; recovery times from Prometheus, reconcile + unique counts. [docs/perf/chaos.md](docs/perf/chaos.md) |
+| `npm run test:contract` | Pact consumer contract web → API (writes `pacts/`); the provider side is `services/api/src/pact.itest.ts` in `npm run test:integration` |
 | `npm run campaign:dismiss -- --id <campaign id> --reason "..."` | "Not an outbreak": sticky until materially worse (+50% or +3 members, or a runaway member) |
 | `npm run vehicle:normal -- --vin <VIN> [--metric coolant_c]` | One van vs its own normal, hourly (the S8 chart query: `core.telemetry_hourly` joined with the van's baseline band) |
 | `npm run test:integration` | Testcontainers tests against real Redpanda + Redis (+ TimescaleDB for the state processor); needs Docker |

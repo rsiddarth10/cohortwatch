@@ -28,3 +28,6 @@ Thumbs.db
 *.parquet
 test-results/
 playwright-report/
+tests/load/*.log
+tests/chaos/last-run.txt
+tests/chaos/reconcile.txt

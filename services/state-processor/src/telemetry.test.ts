@@ -54,6 +54,7 @@ describe('TelemetryWriter bucketing', () => {
 
   it('writes rows through COPY + insert-on-conflict', async () => {
     const queries: string[] = [];
+    const end = vi.fn();
     const client = {
       query: vi.fn((q: unknown) => {
         if (typeof q === 'string') {
@@ -61,18 +62,22 @@ describe('TelemetryWriter bucketing', () => {
           return Promise.resolve({});
         }
         // COPY stream: emulate pg-copy-streams' writable
-        const stream = { on: (e: string, f: () => void) => (e === 'finish' && setTimeout(f, 0), stream), end: vi.fn() };
+        const stream = { on: (e: string, f: () => void) => (e === 'finish' && setTimeout(f, 0), stream), end };
         return stream;
       }),
       release: vi.fn(),
     };
     const pool = { connect: () => Promise.resolve(client) } as unknown as pg.Pool;
     const w = new TelemetryWriter(pool, 60, DEFAULT_DETECT, new StateMetrics(), 60_000, () => undefined);
-    w.add(1, [ev('A', 0, 90), ev('A', 70, 91)]);
+    const score = [{ metric: 'coolant_c' as const, ts: T0, adjDev: 1.5, zLevel: 2, zSlope: 0.5 }];
+    w.add(1, [ev('A', 0, 90), ev('A', 70, 91)], [score]);
     await w.flush();
     expect(w.pending()).toBe(0);
     expect(queries.some((q) => q.includes('ON CONFLICT DO NOTHING'))).toBe(true);
     expect(queries.at(-1)).toBe('COMMIT');
+    const line = String(end.mock.calls[0]![0]).split('\n')[0]!.split('\t');
+    expect(line).toHaveLength(21); // 12 values + 9 score columns
+    expect(line.slice(12, 15)).toEqual(['1.5', '2', '0.5']); // coolant dev, z, zs
     await w.close();
   });
 });

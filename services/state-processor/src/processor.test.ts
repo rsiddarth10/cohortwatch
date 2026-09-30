@@ -87,6 +87,8 @@ describe('processBatch', () => {
     expect(m).toMatchObject({ vin: SICK, fault_family: 'COOLING', family_key: 'COOLING|6|1|10', depot_id: 10 });
     expect(m.firmware).toBe('4.2.1');
     expect(m.baseline_source).toBe('VAN');
+    expect(m.last_code).toBeNull();
+    expect(out.scores.filter(Boolean).length).toBeGreaterThan(100);
     expect(out.unknownVin).toBe(120);
     expect(ps.dirty).toBe(true);
   });

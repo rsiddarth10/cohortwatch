@@ -160,6 +160,8 @@ export interface IncidentEvent {
   slopePerH: number | null;
   dtcCount24: number;
   dtcUsualPerDay: number;
+  /** The van's newest fault code of this family (for the campaign's "top codes" clue). */
+  lastCode: string | null;
   clues: Clue[];
 }
 
@@ -170,12 +172,23 @@ export interface GlobalHit {
   ts: number;
 }
 
+/** The van's score on one metric at this reading (S5 at-risk sisters, S4 solo at-risk): peer-adjusted. */
+export interface VanScore {
+  metric: Metric;
+  ts: number;
+  /** Deviation from its own normal minus the peers' (unit). */
+  adjDev: number;
+  zLevel: number;
+  zSlope: number;
+}
+
 export interface StepResult {
   state: VanState;
   incidents: IncidentEvent[];
   globalHits: GlobalHit[];
   /** True when the reading was at or below the last applied seq and was skipped. */
   skipped: boolean;
+  scores: VanScore[];
 }
 
 /** Fixed namespace for incident ids (random v4, generated once). */
@@ -249,7 +262,8 @@ function severityOf(zLevel: number, dtcActive: boolean, critical: boolean, p: De
 export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResult {
   const p = env.params;
   const reset = ev.flags.includes('SEQ_RESET');
-  if (ev.seq <= prev.lastSeq && !reset) return { state: prev, incidents: [], globalHits: [], skipped: true };
+  if (ev.seq <= prev.lastSeq && !reset)
+    return { state: prev, incidents: [], globalHits: [], skipped: true, scores: [] };
 
   const st: VanState = {
     lastSeq: ev.seq,
@@ -261,6 +275,7 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
   };
   const incidents: IncidentEvent[] = [];
   const globalHits: GlobalHit[] = [];
+  const scores: VanScore[] = [];
   if (ev.evt === 'IGNITION_ON') st.ignOnTs = ev.ts;
   else if (ev.evt === 'IGNITION_OFF') st.ignOnTs = -1;
 
@@ -329,6 +344,7 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
     for (const s of scopes) env.peers.update(s.key, ev.vin, dev, devSlope, ev.ts, fastSlope ?? 0);
     const zL = mp.direction * robustZ(dev - ctx.level, base.mad, mp.minMad);
     const zS = slope === null ? 0 : mp.direction * robustZ(devSlope - ctx.slope, base.slopeMad, mp.minSlopeMad);
+    scores.push({ metric, ts: ev.ts, adjDev: mp.direction * (dev - ctx.level), zLevel: zL, zSlope: zS });
     const abnormal = zL >= p.zLevel || (zS >= p.zSlope && zL >= p.zLevelWithSlope);
     ms.win = kofnPush(ms.win, abnormal, p.n);
     ms.normalRun = abnormal ? 0 : ms.normalRun + 1;
@@ -370,6 +386,7 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
       slopePerH: slope,
       dtcCount24: dtc.count,
       dtcUsualPerDay: usual(fam),
+      lastCode: st.dtc[fam]?.lastCode ?? null,
       clues: [
         ...signalClues({
           p: mp,
@@ -446,6 +463,7 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
       slopePerH: null,
       dtcCount24: dtc.count,
       dtcUsualPerDay: usual(fam),
+      lastCode: st.dtc[fam]?.lastCode ?? null,
       clues: dtcClues(fam, dtc.count),
     } as const;
     if (!open && dtc.active) {
@@ -480,5 +498,5 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
     }
   }
 
-  return { state: st, incidents, globalHits, skipped: false };
+  return { state: st, incidents, globalHits, skipped: false, scores };
 }

@@ -11,6 +11,7 @@ import {
   type IncidentMessage,
   type Metric,
   type PeerContext,
+  type VanScore,
   type VanState,
 } from '@cw/domain';
 import { placementAt, type RegistryCache } from './registry.js';
@@ -55,6 +56,8 @@ export interface BatchOutput {
   applied: number;
   skipped: number;
   unknownVin: number;
+  /** Per input event (same index): the van's peer-adjusted scores at that reading, for the telemetry writer. */
+  scores: (VanScore[] | undefined)[];
 }
 
 export interface ProcessorEnv {
@@ -92,6 +95,7 @@ function toMessage(
     region_id: place.regionId,
     firmware: ev.firmware || null,
     baseline_source: baselineSource,
+    last_code: i.lastCode,
     numbers: {
       level: i.level,
       baseline_median: i.baselineMedian,
@@ -109,8 +113,9 @@ function toMessage(
 
 /** Apply a batch of one partition's events (in offset order) to its state. */
 export function processBatch(part: PartitionState, events: readonly InEvent[], env: ProcessorEnv): BatchOutput {
-  const out: BatchOutput = { incidents: [], globalHits: [], applied: 0, skipped: 0, unknownVin: 0 };
-  for (const { event, sentAt } of events) {
+  const out: BatchOutput = { incidents: [], globalHits: [], applied: 0, skipped: 0, unknownVin: 0, scores: [] };
+  for (let idx = 0; idx < events.length; idx++) {
+    const { event, sentAt } = events[idx]!;
     const van = env.registry.get(event.vin);
     if (!van) {
       out.unknownVin++; // registry lags (refreshed periodically); the reading is not scored
@@ -131,6 +136,7 @@ export function processBatch(part: PartitionState, events: readonly InEvent[], e
     out.applied++;
     part.vans.set(ev.vin, r.state);
     out.globalHits.push(...r.globalHits);
+    if (r.scores.length > 0) out.scores[idx] = r.scores;
     if (!place) continue;
     for (const i of r.incidents) {
       const src = i.metric ? (van.baseline?.metrics[i.metric]?.source ?? null) : null;

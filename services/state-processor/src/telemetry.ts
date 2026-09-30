@@ -1,4 +1,4 @@
-import { qualifyingValue, type DetectParams, type Metric } from '@cw/domain';
+import { qualifyingValue, type DetectParams, type Metric, type VanScore } from '@cw/domain';
 import type pg from 'pg';
 import { from as copyFrom } from 'pg-copy-streams';
 import type { StateMetrics } from './metrics.js';
@@ -29,6 +29,8 @@ interface Bucket {
   spdSum: number;
   spdN: number;
   dtc: number;
+  /** The van's last peer-adjusted score per metric in this bucket (S5 at-risk sisters, S4 solo at-risk). */
+  scores: Partial<Record<Metric, { adjDev: number; z: number; zs: number }>>;
 }
 
 const newBucket = (start: number): Bucket => ({
@@ -44,6 +46,7 @@ const newBucket = (start: number): Bucket => ({
   spdSum: 0,
   spdN: 0,
   dtc: 0,
+  scores: {},
 });
 
 const mean = (b: Bucket, m: Metric) => (b.counts[m] > 0 ? b.sums[m] / b.counts[m] : null);
@@ -63,11 +66,16 @@ function row(vin: string, b: Bucket): string {
     cell(b.ambN > 0 ? b.ambSum / b.ambN : null),
     cell(b.spdN > 0 ? b.spdSum / b.spdN : null),
     String(Math.min(b.dtc, 32767)),
+    ...(['coolant_c', 'batt_temp_c', 'lv_batt_v'] as const).flatMap((m) => {
+      const s = b.scores[m];
+      return [cell(s?.adjDev ?? null), cell(s?.z ?? null), cell(s?.zs ?? null)];
+    }),
   ].join('\t');
 }
 
 const COLUMNS =
-  'vin, ts, readings, coolant_c, coolant_max_c, batt_temp_c, batt_temp_max_c, lv_batt_v, soc_pct, ambient_c, speed_kmh, dtc_count';
+  'vin, ts, readings, coolant_c, coolant_max_c, batt_temp_c, batt_temp_max_c, lv_batt_v, soc_pct, ambient_c, speed_kmh, dtc_count, ' +
+  'coolant_dev, coolant_z, coolant_zs, batt_dev, batt_z, batt_zs, lv_dev, lv_z, lv_zs';
 
 export class TelemetryWriter {
   private readonly open = new Map<number, Map<string, Bucket>>();
@@ -94,11 +102,12 @@ export class TelemetryWriter {
     return this.queue.length;
   }
 
-  add(partition: number, events: readonly InEvent[]): void {
+  add(partition: number, events: readonly InEvent[], scores: readonly (VanScore[] | undefined)[] = []): void {
     let open = this.open.get(partition);
     if (!open) this.open.set(partition, (open = new Map()));
     let wm = this.watermark.get(partition) ?? 0;
-    for (const { event: e } of events) {
+    for (let idx = 0; idx < events.length; idx++) {
+      const e = events[idx]!.event;
       const ts = Date.parse(e.event_ts);
       if (!Number.isFinite(ts)) continue;
       const start = Math.floor(ts / this.bucketMs) * this.bucketMs;
@@ -137,6 +146,7 @@ export class TelemetryWriter {
         b.spdN++;
       }
       b.dtc += e.dtc.length;
+      for (const s of scores[idx] ?? []) b.scores[s.metric] = { adjDev: s.adjDev, z: s.zLevel, zs: s.zSlope };
     }
     this.watermark.set(partition, wm);
     // parked vans: close buckets the partition's event time has left behind

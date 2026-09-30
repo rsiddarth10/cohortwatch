@@ -292,7 +292,7 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
           }
           const out = processBatch(ps, events, env);
           const latencies = await retry('incident write', () => sink.write(out.incidents, out.globalHits));
-          telemetry?.add(p, events);
+          telemetry?.add(p, events, out.scores);
           ps.offset = (BigInt(last) + 1n).toString();
 
           const now = Date.now();

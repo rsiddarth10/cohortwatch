@@ -94,6 +94,16 @@ describe('stepVan: van vs its own normal', () => {
     for (const seed of [1, 2, 3, 4, 5]) expect(drive(() => 90, 72, env(coolantBase()), seed).incidents).toEqual([]);
   });
 
+  it('returns the peer-adjusted score of each scored metric (for at-risk sisters)', () => {
+    const { st } = drive(() => 92, 12, env(coolantBase()));
+    const r = stepVan(st, reading('V1', 999, T0 + 13 * HOUR_MS, 92), env(coolantBase()));
+    const s = r.scores.find((x) => x.metric === 'coolant_c')!;
+    expect(s.adjDev).toBeCloseTo(2, 0);
+    expect(s.zLevel).toBeGreaterThan(1.5);
+    expect(s.ts).toBe(T0 + 13 * HOUR_MS);
+    expect(stepVan(emptyVan(), reading('V2', 1, T0, 92), env(undefined)).scores).toEqual([]);
+  });
+
   it('a van without a baseline is tracked but not scored', () => {
     const { st, incidents } = drive((h) => 90 + h, 48, env(undefined));
     expect(incidents).toEqual([]);

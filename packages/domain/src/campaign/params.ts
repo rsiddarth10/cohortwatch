@@ -36,9 +36,9 @@ export const CampaignParamsSchema = z.object({
       windowDays: z.number().positive().default(3),
       /** Shown only if at least this share of members got it, and the gap to healthy sisters is this many points. */
       minMemberShare: z.number().min(0).max(1).default(0.6),
-      minGapPts: z.number().min(0).max(100).default(30),
+      minGapPts: z.number().min(0).max(100).default(20), // 30 hid the S1 clue at 30K (72% vs 48%): members' windows start after part of the rollout
     })
-    .default({ windowDays: 3, minMemberShare: 0.6, minGapPts: 30 }),
+    .default({ windowDays: 3, minMemberShare: 0.6, minGapPts: 20 }),
   /** Money (assumptions, INR per van): expected breakdown cost if not fixed, minus the planned fix. */
   money: z
     .object({

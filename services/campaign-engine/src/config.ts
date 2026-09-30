@@ -46,6 +46,11 @@ export function campaignParamsFrom(env: NodeJS.ProcessEnv): CampaignParams {
       zSlope: pick('AT_RISK_Z_SLOPE', base.atRisk.zSlope),
       everySimH: pick('AT_RISK_EVERY_SIM_H', base.atRisk.everySimH),
     },
+    firmware: {
+      windowDays: pick('CAMPAIGN_FW_WINDOW_DAYS', base.firmware.windowDays),
+      minMemberShare: pick('CAMPAIGN_FW_MIN_MEMBER_SHARE', base.firmware.minMemberShare),
+      minGapPts: pick('CAMPAIGN_FW_MIN_GAP_PTS', base.firmware.minGapPts),
+    },
   });
 }
 

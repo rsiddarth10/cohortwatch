@@ -26,3 +26,5 @@
 S1 at p ≈ 5e-22, S1b at p ≈ 1e-12. A region-wide condition, or a common fault in a big cohort, needs more cases.
 The guard only looks back in event time, so if a regional response reaches the other depots later than this one,
 the regional term arrives late too.
+
+**Measured:** 5K and 30K runs to the produced T0+72 h: S1 = 1, S1b = 1 (separate), heatwave 0, decoys 0, background 0 (`docs/perf/campaign-engine.md`).

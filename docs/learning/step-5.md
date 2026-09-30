@@ -7,7 +7,7 @@
 - Tuning order used: α 1e-3 → 1e-4 first (not enough at p = 1e-8), then fixed the regional denominator: it counted all region vans, most of which cannot show the fault.
 - At-risk sisters (`atrisk.ts`): non-members with peer-adjusted z ≥ 1.5 in 3 of 4 hourly rows, or a steep rise. *Q: where do scores come from?* The S3 telemetry writer now stores them per van-hour (ADR 0011). This is how the **late sisters** are caught before their own incident.
 - `firmware.ts`: members' installs in the 3 days before their first incident vs healthy sisters' in the 3 days before the campaign's first incident (same window length).
-- *Q: why doesn't the firmware clue match the plant's 16/18 vs 48%?* The plant counts a different window (T0−72 h … T0+6 h).
+- *Q: why doesn't the firmware clue match the plant's 16/18 vs 48%?* The plant counts a different window (T0−72 h … T0+6 h); ours shows 13–14 of 18 (the gap bar is 20 points, config).
 - `clues.ts`: place, trend, top codes, "peers elsewhere in the region are normal", "n vans where λ would be expected", and cost if not fixed (₹, rates in config).
 - `similarity.ts`: a 31-dim feature vector and 30 synthetic past campaigns, top 3 by pgvector cosine (ADR 0013). No embedding API.
 - `services/campaign-engine`: one transaction per incident (book, members, clues, at-risk, similar, outbox). The advisory-lock leader runs the outbox relay and the hourly at-risk refresh (ADR 0012).

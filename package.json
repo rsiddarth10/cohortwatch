@@ -11,7 +11,8 @@
     "packages/common",
     "services/simulator",
     "services/normaliser",
-    "services/state-processor"
+    "services/state-processor",
+    "services/campaign-engine"
   ],
   "scripts": {
     "build": "tsc -b",
@@ -32,7 +33,9 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "normaliser:bench-cpu": "tsc -b && node services/normaliser/dist/cli/bench-cpu.js",
     "eval:incidents": "tsc -b && node services/simulator/dist/cli/eval-incidents.js",
-    "vehicle:normal": "tsc -b && node services/state-processor/dist/cli/vehicle-normal.js"
+    "vehicle:normal": "tsc -b && node services/state-processor/dist/cli/vehicle-normal.js",
+    "campaign:dismiss": "tsc -b && node services/campaign-engine/dist/cli/dismiss.js",
+    "eval:campaigns": "tsc -b && node services/simulator/dist/cli/eval-campaigns.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

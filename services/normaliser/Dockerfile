@@ -10,6 +10,7 @@ COPY packages/common/package.json packages/common/
 COPY services/simulator/package.json services/simulator/
 COPY services/normaliser/package.json services/normaliser/
 COPY services/state-processor/package.json services/state-processor/
+COPY services/campaign-engine/package.json services/campaign-engine/
 RUN npm ci --no-audit --no-fund
 COPY packages/domain packages/domain
 COPY packages/common packages/common

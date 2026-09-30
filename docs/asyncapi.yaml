@@ -1,0 +1,133 @@
+asyncapi: 3.0.0
+info:
+  title: CohortWatch event streams
+  version: 1.0.0
+  description: |
+    Every Kafka topic (Redpanda locally, Amazon MSK in production), with its key, payload format, producer and
+    consumers. Partitions and retention come from infra/kafka/topic-init.sh. Delivery is at-least-once
+    everywhere; every consumer is idempotent (dedupe by sequence, event id or deterministic uuid5).
+servers:
+  local:
+    host: localhost:19092
+    protocol: kafka
+    description: docker compose (Redpanda v24.2.7, schema registry on :8081)
+  production:
+    host: b-1.cohortwatch.kafka.ap-south-1.amazonaws.com:9094
+    protocol: kafka-secure
+    description: Amazon MSK, TLS in transit; OEM feeds authenticate with mTLS, services with IAM
+channels:
+  rawOemA:
+    address: raw.oem-a.v1
+    description: 'Aurex (OEM-A) cloud feed. Key: VIN. JSON, Aurex format (aurex.v1 / aurex.v2 after the format switch). 24 partitions, 3 days. Producer: the OEM cloud (simulator locally). Consumer: normaliser (cg.normaliser).'
+    messages: { raw: { $ref: '#/components/messages/RawReading' } }
+  rawOemB:
+    address: raw.oem-b.v1
+    description: 'Kestrel (OEM-B) cloud feed. Key: VIN. JSON, Kestrel format (kestrel.v1; °F, different field names). 24 partitions, 3 days. Producer: the OEM cloud (simulator). Consumer: normaliser.'
+    messages: { raw: { $ref: '#/components/messages/RawReading' } }
+  canonical:
+    address: telemetry.canonical.v1
+    description: 'One canonical event per valid reading. Key: VIN. Avro (Confluent wire format, schema in the registry, BACKWARD compatible; ADR 0003). 48 partitions, 3 days. Headers x-src-topic/partition/offset. Producer: normaliser. Consumer: state processor (cg.state).'
+    messages: { canonical: { $ref: '#/components/messages/CanonicalEvent' } }
+  dlq:
+    address: telemetry.dlq.v1
+    description: 'Rejected raw records with the reason (bad VIN, schema, value range, too old). Key: VIN or raw key. JSON. 6 partitions, 14 days. Producer: normaliser. Consumer: none (inspection, reconcile).'
+  incidents:
+    address: incidents.v1
+    description: 'Incident actions OPEN / ESCALATE / CLOSE with clues, severity, runaway and hours to limit. Key: VIN. JSON; incident_id is deterministic. 24 partitions, 14 days. Producer: state processor. Consumers: campaign engine (cg.campaign), workshop (cg.workshop).'
+    messages: { incident: { $ref: '#/components/messages/IncidentMessage' } }
+  campaignEvents:
+    address: campaign.events.v1
+    description: 'OPENED, GREW, AT_RISK_CHANGED, DISMISSED, REOPENED, MERGED, FIX_PROGRESS, CLOSED. Key: campaign id. JSON; eventId = uuid5(campaign, type, version). 12 partitions, 30 days. Producer: campaign engine (transactional outbox). Consumers: workshop, agent, API (SSE bus).'
+    messages: { campaignEvent: { $ref: '#/components/messages/CampaignEvent' } }
+  queueEvents:
+    address: queue.events.v1
+    description: 'QUEUE_CHANGED with version and the top 20 items. Key: depot id. JSON. 12 partitions, 7 days. Producer: workshop (outbox). Consumers: agent, API (SSE bus).'
+  repairs:
+    address: workshop.repairs.v1
+    description: "{vin, repaired_at}. Key: VIN. JSON. 3 partitions, 7 days. Producers: API (POST /vehicles/:vin/repair), simulator (AUTO_REPAIRS, sim:repair). Consumers: workshop (fix confirmation), state processor (resets the van's trend; ADR 0016), simulator (applies the physical effect)."
+  outcomes:
+    address: workshop.outcomes.v1
+    description: 'FIXED or NOT_FIXED per repair. Key: VIN. JSON. 6 partitions, 30 days. Producer: workshop (outbox). Consumers: campaign engine (member fixed; a campaign closes when all are fixed), API.'
+  proposals:
+    address: agent.proposals.v1
+    description: 'Agent proposal lifecycle: CREATED, UPDATED, WITHDRAWN (agent); APPROVED, REJECTED (API, lead only). Key: depot id. JSON. 6 partitions, 30 days. Producers: agent (outbox), API (outbox). Consumers: workshop (applies approved bookings), API (SSE bus).'
+  audit:
+    address: audit.v1
+    description: 'Every API view and action: actor, role, action, resource, tenant. Key: tenant. JSON. 6 partitions, 90 days. Producer: API (outbox, same transaction as the read). Consumer: none in the stack (for a SIEM).'
+  benchRaw:
+    address: bench.raw.v1
+    description: 'Bench mode only (npm run sim:bench), 48 partitions, 10 minutes retention.'
+operations:
+  normaliseA: { action: receive, channel: { $ref: '#/channels/rawOemA' }, summary: normaliser consumes the Aurex feed }
+  normaliseB:
+    { action: receive, channel: { $ref: '#/channels/rawOemB' }, summary: normaliser consumes the Kestrel feed }
+  detect:
+    { action: receive, channel: { $ref: '#/channels/canonical' }, summary: state processor consumes canonical events }
+  group:
+    {
+      action: receive,
+      channel: { $ref: '#/channels/incidents' },
+      summary: campaign engine and workshop consume incidents,
+    }
+  plan:
+    {
+      action: receive,
+      channel: { $ref: '#/channels/campaignEvents' },
+      summary: workshop,
+      agent and API consume campaign events,
+    }
+components:
+  messages:
+    RawReading:
+      contentType: application/json
+      payload:
+        type: object
+        description: OEM-specific; see packages/domain/src/formats (aurex, kestrel)
+    CanonicalEvent:
+      contentType: avro/binary
+      description: Avro record CanonicalTelemetry (services/normaliser/src/avro.ts), registered in the schema registry
+      payload:
+        type: object
+        properties:
+          event_id: { type: string }
+          vin: { type: string, pattern: '^[A-HJ-NPR-Z0-9]{17}$' }
+          seq: { type: integer }
+          event_ts: { type: string, format: date-time }
+          evt: { type: string, description: EventType enum }
+          ignition: { type: [boolean, 'null'] }
+          charging: { type: [boolean, 'null'] }
+          lat: { type: [number, 'null'] }
+          speed_kmh: { type: [number, 'null'] }
+          odo_km: { type: [number, 'null'] }
+          coolant_c: { type: [number, 'null'] }
+          batt_temp_c: { type: [number, 'null'] }
+          soc_pct: { type: [number, 'null'] }
+          lv_batt_v: { type: [number, 'null'] }
+          dtc: { type: array, items: { type: string } }
+          fault_families: { type: array, items: { type: string } }
+          firmware: { type: [string, 'null'] }
+          source_format: { type: string, description: 'aurex.v1, aurex.v2 or kestrel.v1' }
+          quality_flags: { type: array, items: { type: string } }
+    IncidentMessage:
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          incident_id: { type: string, format: uuid }
+          action: { type: string, enum: [OPEN, ESCALATE, CLOSE] }
+          vin: { type: string }
+          fault_family: { type: string }
+          runaway: { type: boolean }
+          hours_to_limit: { type: [number, 'null'] }
+          event_ts: { type: string, format: date-time }
+    CampaignEvent:
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          type: { type: string }
+          campaignId: { type: string, format: uuid }
+          eventId: { type: string, format: uuid }
+          familyKey: { type: string, description: 'family | model | duty | depot' }
+          members: { type: integer }
+          version: { type: integer }

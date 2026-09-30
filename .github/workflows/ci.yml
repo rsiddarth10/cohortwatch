@@ -29,6 +29,8 @@ jobs:
         run: npm run typecheck
       - name: Unit tests + coverage (domain >= 80%)
         run: npm test
+      - name: Contract tests (Pact consumer, web → API; the provider is verified in the integration job)
+        run: npm run test:contract
       - name: Coverage summary
         if: always()
         run: |

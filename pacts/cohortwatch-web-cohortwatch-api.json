@@ -1,0 +1,392 @@
+{
+  "consumer": {
+    "name": "cohortwatch-web"
+  },
+  "interactions": [
+    {
+      "description": "the campaign page for C1",
+      "providerStates": [
+        {
+          "name": "campaign C1 is open at depot 10"
+        }
+      ],
+      "request": {
+        "headers": {
+          "authorization": "Bearer eyJhbGciOiJSUzI1NiJ9.e30.sig"
+        },
+        "matchingRules": {
+          "header": {
+            "authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer [A-Za-z0-9._-]+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/campaigns/11111111-1111-5111-8111-111111111111"
+      },
+      "response": {
+        "body": {
+          "at_risk": [],
+          "campaign": {
+            "at_risk_count": 0,
+            "depot": "D-010",
+            "depot_id": 10,
+            "duty": "URBAN",
+            "fault_family": "COOLING",
+            "id": "11111111-1111-5111-8111-111111111111",
+            "member_count": 18,
+            "model": "KS-D1",
+            "status": "OPEN",
+            "version": 4
+          },
+          "clues": [],
+          "history": [],
+          "members": [],
+          "notes": [],
+          "overrides": [],
+          "proposals": [],
+          "similar": []
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "etag": "\"4\""
+        },
+        "matchingRules": {
+          "body": {
+            "$.at_risk": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.campaign": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.campaign.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.clues": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.history": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.members": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.notes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.overrides": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.proposals": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.similar": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "etag": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\"\\d+\"$"
+                }
+              ]
+            }
+          },
+          "status": {}
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "the depot board for depot 10",
+      "providerStates": [
+        {
+          "name": "depot 10 has a queue"
+        }
+      ],
+      "request": {
+        "headers": {
+          "authorization": "Bearer eyJhbGciOiJSUzI1NiJ9.e30.sig"
+        },
+        "matchingRules": {
+          "header": {
+            "authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer [A-Za-z0-9._-]+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/depots/10/queue"
+      },
+      "response": {
+        "body": {
+          "bays": 1,
+          "cards": [],
+          "depot": {
+            "code": "D-010",
+            "geohash5": "t9abc",
+            "id": 10,
+            "region": "Coral Coast"
+          },
+          "today": [
+            {
+              "cost_inr": 5100,
+              "cost_text": "waiting 1 day ≈ ₹5,100",
+              "pinned": false,
+              "rank": 1,
+              "reasons": [
+                {
+                  "text": "member of COOLING campaign at D-010 (18 vans)",
+                  "type": "CAMPAIGN"
+                }
+              ],
+              "score": 0.6,
+              "slot": "TODAY",
+              "vin": "7KSHM1D84KK600001"
+            }
+          ],
+          "tomorrow": [],
+          "version": 3,
+          "waiting": [],
+          "watching": []
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.bays": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.cards": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.depot": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.today": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.today[*].cost_inr": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.today[*].cost_text": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.today[*].pinned": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.today[*].rank": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.today[*].reasons": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.today[*].reasons[*].text": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.today[*].reasons[*].type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.today[*].score": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            },
+            "$.today[*].slot": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.today[*].vin": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.tomorrow": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.version": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.waiting": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.watching": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "status": {}
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "13.2.0"
+    },
+    "pactRust": {
+      "ffi": "0.4.22",
+      "models": "1.2.3"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "cohortwatch-api"
+  }
+}

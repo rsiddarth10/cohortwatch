@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: cohortwatch
+    folder: CohortWatch
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

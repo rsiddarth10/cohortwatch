@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@amiceli/vitest-cucumber": "^8.0.0",
+    "@pact-foundation/pact": "^13.2.0",
     "@testcontainers/redpanda": "^12.2.0",
     "@types/express": "^5.0.3",
     "@types/pg": "^8.23.1",

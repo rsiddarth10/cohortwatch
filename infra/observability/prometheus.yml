@@ -1,0 +1,20 @@
+# S9 observability (compose profile "observability"). Every service exposes Prometheus /metrics (S2 rule);
+# replicated services are found through Docker DNS, so each replica is scraped.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+scrape_configs:
+  - job_name: simulator
+    static_configs: [{ targets: ['simulator:9464'] }]
+  - job_name: normaliser
+    dns_sd_configs: [{ names: ['normaliser'], type: A, port: 9465 }]
+  - job_name: state-processor
+    dns_sd_configs: [{ names: ['state-processor'], type: A, port: 9466 }]
+  - job_name: campaign-engine
+    dns_sd_configs: [{ names: ['campaign-engine'], type: A, port: 9475 }]
+  - job_name: workshop
+    dns_sd_configs: [{ names: ['workshop'], type: A, port: 9477 }]
+  - job_name: api
+    static_configs: [{ targets: ['api:3100'] }]
+  - job_name: agent
+    static_configs: [{ targets: ['agent:9479'] }]

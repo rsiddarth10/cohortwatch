@@ -36,6 +36,7 @@
     "sim:watch": "tsc -b && node services/simulator/dist/cli/watch.js",
     "normaliser:reconcile": "tsc -b && node services/normaliser/dist/cli/reconcile.js",
     "test:e2e": "playwright test",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "normaliser:bench-cpu": "tsc -b && node services/normaliser/dist/cli/bench-cpu.js",
     "eval:incidents": "tsc -b && node services/simulator/dist/cli/eval-incidents.js",
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@pact-foundation/pact": "^13.2.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^22.19.0",
     "@vitest/coverage-v8": "^5.0.2",

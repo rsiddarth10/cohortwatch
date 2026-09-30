@@ -41,7 +41,11 @@ sleep "$DOWN"; docker start "$S" >/dev/null; log "$S started again"
 sleep "$GAP"
 
 wait "$REC" || true
-log "reconcile over the whole experiment:"; cat tests/chaos/reconcile.txt | tee -a "$OUT"
+log "reconcile over the whole experiment (note: a killed replica's in-memory duplicate counter is lost with it):"
+cat tests/chaos/reconcile.txt | tee -a "$OUT"
+LEDGERS=$(for p in 9465 9466 9467 9468; do curl -sf -m 2 "http://localhost:$p/ledger" >/dev/null && printf 'http://localhost:%s/ledger,' "$p"; done)
+log "reconcile, 60 s after the faults (steady state again):"
+node services/normaliser/dist/cli/reconcile.js --seconds 60 --ledger "${LEDGERS%,}" 2>&1 | tail -7 | tee -a "$OUT" || true
 
 # recovery times from Prometheus (5 s resolution)
 recovery() { # $1 = fault epoch, $2 = PromQL rate expression

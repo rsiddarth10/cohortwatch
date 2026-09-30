@@ -254,11 +254,19 @@ export function CampaignPage({ me }: { me: Me }) {
               )}
             </div>
           ))}
-          {d.data.notes.map((n) => (
+          {[
+            ...d.data.notes.filter((n) => n.kind === 'NOTE'),
+            ...d.data.notes.filter((n) => n.kind !== 'NOTE').slice(-5),
+          ].map((n) => (
             <div key={`${n.kind}${n.vin}`} className="small muted note-line">
               {n.text}
             </div>
           ))}
+          {d.data.notes.filter((n) => n.kind !== 'NOTE').length > 5 && (
+            <div className="small muted">
+              + {d.data.notes.filter((n) => n.kind !== 'NOTE').length - 5} earlier “inspect at next visit” notes
+            </div>
+          )}
           {d.data.similar.length > 0 && (
             <>
               <h2>Looks like</h2>
@@ -276,7 +284,7 @@ export function CampaignPage({ me }: { me: Me }) {
               <li key={i}>
                 {h.type.toLowerCase().replace('_', ' ')}
                 {h.members != null && ` · ${h.members} vans`}
-                <span className="muted"> · {when(h.ts ? new Date(Number(h.ts)).toISOString() : h.created_at)}</span>
+                <span className="muted"> · {when(h.ts ?? h.created_at)}</span>
               </li>
             ))}
             {d.data.overrides.map((o, i) => (

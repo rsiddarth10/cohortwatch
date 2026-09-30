@@ -30,7 +30,7 @@ test('lead: S1 campaign → approve the agent proposal → the board updates', a
     .locator('.proposal')
     .filter({ hasText: 'PENDING' })
     .first()
-    .getByRole('button', { name: 'Approve' })
+    .getByRole('button', { name: 'Approve', exact: true })
     .click();
   await expect(page.getByText('Approved: the workshop re-plans the bays')).toBeVisible();
 
@@ -46,5 +46,5 @@ test('viewer: masked van, no approve buttons', async ({ page }) => {
   await expect(page.getByText(/area \w{5}/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Record repair' })).toHaveCount(0);
   await page.goto('/agent');
-  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
 });

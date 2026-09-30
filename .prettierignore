@@ -6,3 +6,5 @@ package-lock.json
 docs/*.pdf
 docs/*.docx
 *.md
+test-results
+playwright-report

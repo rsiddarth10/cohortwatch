@@ -117,9 +117,21 @@ export interface VanState {
   open: Partial<Record<Family, OpenIncident>>;
   /** Metrics whose global-threshold rule already fired once. */
   gHit: Partial<Record<Metric, true>>;
+  /** Event time of the last repair applied (S6): the trend restarted there; older readings are ignored. */
+  repairTs?: number;
 }
 
 export const emptyVan = (): VanState => ({ lastSeq: -1, ignOnTs: -1, m: {}, dtc: {}, open: {}, gHit: {} });
+
+/**
+ * A repair resets the van's trend (brief §1.6, ADR 0016): the EW sums, k-of-n windows, runaway counters and
+ * code-rate rings start again from post-repair readings. Open incidents stay open until the post-repair readings
+ * close them (12 normal readings), so a bad repair keeps its incident. Idempotent for the same or an older repair.
+ */
+export function resetForRepair(prev: VanState, repairTs: number): VanState {
+  if ((prev.repairTs ?? -Infinity) >= repairTs) return prev;
+  return { ...prev, m: {}, dtc: {}, repairTs };
+}
 
 const emptyMetric = (): MetricState => ({
   slow: emptyTrend(),
@@ -264,6 +276,10 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
   const reset = ev.flags.includes('SEQ_RESET');
   if (ev.seq <= prev.lastSeq && !reset)
     return { state: prev, incidents: [], globalHits: [], skipped: true, scores: [] };
+  if (prev.repairTs !== undefined && ev.ts < prev.repairTs) {
+    // a reading from before the repair (arriving late): it must not re-teach the old fault
+    return { state: { ...prev, lastSeq: ev.seq }, incidents: [], globalHits: [], skipped: false, scores: [] };
+  }
 
   const st: VanState = {
     lastSeq: ev.seq,
@@ -272,6 +288,7 @@ export function stepVan(prev: VanState, ev: DetectEvent, env: StepEnv): StepResu
     dtc: { ...prev.dtc },
     open: { ...prev.open },
     gHit: prev.gHit,
+    ...(prev.repairTs !== undefined ? { repairTs: prev.repairTs } : {}),
   };
   const incidents: IncidentEvent[] = [];
   const globalHits: GlobalHit[] = [];

@@ -13,3 +13,5 @@ export * from './groundtruth.js';
 export * from './canonical/index.js';
 export * from './detect/index.js';
 export * from './campaign/index.js';
+export * from './queue/index.js';
+export * from './repair/index.js';

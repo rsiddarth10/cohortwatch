@@ -27,6 +27,8 @@ export interface Member {
   slopePerH: number | null;
   lastCode: string | null;
   firmware: string | null;
+  /** S6: its repair was confirmed FIXED (a NOT_FIXED outcome clears it). */
+  fixed?: boolean;
 }
 
 export interface Dismissal {
@@ -66,7 +68,8 @@ export interface KeyBook {
   groups: Record<string, Group>;
 }
 
-export type CampaignEventType = 'OPENED' | 'GREW' | 'MERGED' | 'DISMISSED' | 'REOPENED' | 'AT_RISK_CHANGED';
+export type CampaignEventType =
+  'OPENED' | 'GREW' | 'MERGED' | 'DISMISSED' | 'REOPENED' | 'AT_RISK_CHANGED' | 'FIX_PROGRESS' | 'CLOSED';
 
 export interface CampaignEvent {
   type: CampaignEventType;
@@ -304,4 +307,30 @@ export function dismiss(g: Group, by: string, reason: string, ts: number): { gro
 export function atRiskChanged(g: Group, ts: number, vins: readonly string[]): { group: Group; event: CampaignEvent } {
   const out = { ...g, version: g.version + 1 };
   return { group: out, event: event(out, 'AT_RISK_CHANGED', ts, { atRisk: vins.length, vins }) };
+}
+
+/**
+ * S6 fix confirmation reaches the campaign: a member's repair outcome sets its `fixed` flag. A campaign (OPEN or
+ * DISMISSED) CLOSES only when every member is confirmed FIXED; a NOT_FIXED member keeps it open (brief §1.3.4).
+ */
+export function applyOutcome(
+  g: Group,
+  vin: string,
+  outcome: 'FIXED' | 'NOT_FIXED',
+  ts: number,
+): { group: Group; events: CampaignEvent[] } {
+  const m = g.members[vin];
+  const fixed = outcome === 'FIXED';
+  if (!m || g.status === 'MERGED' || g.status === 'CLOSED' || Boolean(m.fixed) === fixed)
+    return { group: g, events: [] };
+  const out: Group = { ...g, members: { ...g.members, [vin]: { ...m, fixed } }, version: g.version + 1 };
+  const all = Object.values(out.members);
+  const nFixed = all.filter((x) => x.fixed).length;
+  if (out.status === 'WATCHING') return { group: out, events: [] };
+  const detail = { fixed: nFixed, members: all.length, vin, outcome };
+  if (nFixed === all.length) {
+    out.status = 'CLOSED';
+    return { group: out, events: [event(out, 'CLOSED', ts, detail)] };
+  }
+  return { group: out, events: [event(out, 'FIX_PROGRESS', ts, detail)] };
 }

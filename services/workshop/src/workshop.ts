@@ -242,15 +242,48 @@ export class Workshop {
     return decided;
   }
 
+  /**
+   * The hourly refresh of every depot (S9 scaling fix). The inputs of ALL depots are read in one batch of queries
+   * (7 instead of 7 per depot), every depot is re-ranked in memory, and only depots whose ranked queue differs from
+   * the stored one get a write transaction. A depot rebuilt by an event in between (its version moved) falls back
+   * to the per-depot path with fresh inputs.
+   */
   async refreshAll(simNow: number): Promise<Rebuilt[]> {
+    const depots = this.registry.depots();
+    const inputs = await this.loadInputs(this.pool, depots, simNow);
+    const stored = new Map(
+      (
+        await this.pool.query<{ depot_id: number; version: number; s: string | null }>(
+          `SELECT v.depot_id, v.version,
+                  (SELECT string_agg(vin || ':' || rank || ':' || slot, ',' ORDER BY rank) FROM core.queue_item q
+                   WHERE q.depot_id = v.depot_id) AS s
+           FROM core.queue_version v`,
+        )
+      ).rows.map((r) => [r.depot_id, r]),
+    );
     const out: Rebuilt[] = [];
-    for (const depotId of this.registry.depots()) out.push(await this.tx((c) => this.rebuildDepot(c, depotId, simNow)));
+    for (const depotId of depots) {
+      const computed = this.compute(depotId, inputs.get(depotId) ?? emptyInputs());
+      const prev = stored.get(depotId);
+      const top = computed.placed[0] ?? null;
+      if (prev && (prev.s ?? '') === signatureOf(computed.placed) && !top?.pinned) {
+        out.push({ depotId, changed: false, version: prev.version, top: top?.vin ?? null });
+        continue;
+      }
+      out.push(
+        await this.tx(async (c) => {
+          const version = await this.lockVersion(c, depotId, simNow);
+          if (prev && version !== prev.version) return this.rebuildDepot(c, depotId, simNow); // moved meanwhile
+          return this.write(c, depotId, version, computed, new Date(simNow));
+        }),
+      );
+    }
     return out;
   }
 
   // ---- the queue of one depot --------------------------------------------------------------------
 
-  async rebuildDepot(c: Q, depotId: number, asOf: number): Promise<Rebuilt> {
+  private async lockVersion(c: Q, depotId: number, asOf: number): Promise<number> {
     await c.query(
       'INSERT INTO core.queue_version (depot_id, version, as_of_ts) VALUES ($1, 0, $2) ON CONFLICT DO NOTHING',
       [depotId, new Date(asOf)],
@@ -259,28 +292,37 @@ export class Workshop {
       'SELECT version FROM core.queue_version WHERE depot_id = $1 FOR UPDATE',
       [depotId],
     );
-    const version = cur.rows[0]!.version;
-    const vins = this.registry.depotVins(depotId);
+    return cur.rows[0]!.version;
+  }
+
+  async rebuildDepot(c: Q, depotId: number, asOf: number): Promise<Rebuilt> {
+    const version = await this.lockVersion(c, depotId, asOf);
+    const inp = (await this.loadInputs(c, [depotId], asOf)).get(depotId) ?? emptyInputs();
+    return this.write(c, depotId, version, this.compute(depotId, inp), new Date(asOf));
+  }
+
+  /** Every input of the given depots' queues, in one batch of queries, grouped by the van's depot. */
+  private async loadInputs(c: Q, depotIds: number[], asOf: number): Promise<Map<number, DepotInputs>> {
+    const vins = depotIds.flatMap((d) => this.registry.depotVins(d));
     const since = new Date(asOf - 24 * HOUR);
     const at = new Date(asOf);
-
-    const [repairs, incidents, members, atRisk, rows, agg] = [
-      await c.query<{ vin: string; repaired_ts: Date; status: string }>(
+    const [repairs, incidents, members, atRisk, rows, agg, bookings] = [
+      await c.query<RepairRow>(
         `SELECT DISTINCT ON (vin) vin::text AS vin, repaired_ts, status FROM core.repair
          WHERE vin = ANY($1) AND repaired_ts <= $2 ORDER BY vin, repaired_ts DESC`,
         [vins, at],
       ),
-      await c.query<{ id: string; vin: string; fault_family: string; metric: string | null; severity: Severity; runaway: boolean; hours_to_limit: number | null; deviation: number | null; slope_per_h: number | null; z_slope: number | null; trigger: 'SIGNAL' | 'DTC_RATE'; opened_ts: Date }>(
+      await c.query<IncidentRow>(
         `SELECT id, vin::text AS vin, fault_family, metric, severity, runaway, hours_to_limit, deviation, slope_per_h, z_slope,
                 trigger, opened_ts FROM core.incident WHERE status = 'OPEN' AND vin = ANY($1) AND opened_ts <= $2`,
         [vins, at],
       ),
-      await c.query<{ vin: string; id: string; fault_family: string; member_count: number; depot_id: number; fixed: boolean }>(
+      await c.query<MemberRow>(
         `SELECT m.vin::text AS vin, g.id, g.fault_family, g.member_count, g.depot_id, m.fixed FROM core.campaign_member m
          JOIN core.campaign g ON g.id = m.campaign_id WHERE m.active AND g.status = 'OPEN' AND m.vin = ANY($1)`,
         [vins],
       ),
-      await c.query<{ vin: string; id: string; fault_family: string; member_count: number; depot_id: number }>(
+      await c.query<RiskRow>(
         `SELECT a.vin::text AS vin, g.id, g.fault_family, g.member_count, g.depot_id FROM core.campaign_at_risk a
          JOIN core.campaign g ON g.id = a.campaign_id WHERE a.active AND g.status = 'OPEN' AND a.vin = ANY($1)`,
         [vins],
@@ -290,14 +332,42 @@ export class Workshop {
          FROM core.telemetry WHERE vin = ANY($1) AND ts > $2 AND ts <= $3 ORDER BY vin, ts DESC`,
         [vins, new Date(asOf - 6 * HOUR), at],
       ),
-      await c.query<{ vin: string; codes: number; harsh: number | null; driven: number }>(
+      await c.query<AggRow>(
         `SELECT vin::text AS vin, sum(dtc_count)::int AS codes,
                 sum(harsh_count) FILTER (WHERE speed_kmh > 0)::float8 AS harsh,
                 count(*) FILTER (WHERE speed_kmh > 0 AND harsh_count IS NOT NULL)::int AS driven
          FROM core.telemetry WHERE vin = ANY($1) AND ts > $2 AND ts <= $3 GROUP BY vin`,
         [vins, since, at],
       ),
+      await c.query<BookingRow>(
+        'SELECT depot_id, vin::text AS vin, slot, booked_by FROM core.queue_booking WHERE depot_id = ANY($1)',
+        [depotIds],
+      ),
     ]; // prettier-ignore
+    const out = new Map<number, DepotInputs>(depotIds.map((d) => [d, emptyInputs()]));
+    const depotOf = (vin: string) => {
+      const d = this.registry.van(vin)?.depotId;
+      return d === undefined ? undefined : out.get(d);
+    };
+    for (const r of repairs.rows) depotOf(r.vin)?.repairs.push(r);
+    for (const r of incidents.rows) depotOf(r.vin)?.incidents.push(r);
+    for (const r of members.rows) depotOf(r.vin)?.members.push(r);
+    for (const r of atRisk.rows) depotOf(r.vin)?.atRisk.push(r);
+    for (const r of rows.rows) depotOf(r.vin)?.rows.push(r);
+    for (const r of agg.rows) depotOf(r.vin)?.agg.push(r);
+    for (const b of bookings.rows) out.get(b.depot_id)?.bookings.push(b);
+    return out;
+  }
+
+  /** Rank one depot's queue from its inputs (pure: no I/O). */
+  private compute(depotId: number, inp: DepotInputs): Computed {
+    const vins = this.registry.depotVins(depotId);
+    const repairs = { rows: inp.repairs };
+    const incidents = { rows: inp.incidents };
+    const members = { rows: inp.members };
+    const atRisk = { rows: inp.atRisk };
+    const rows = { rows: inp.rows };
+    const agg = { rows: inp.agg };
 
     const repairOf = new Map(repairs.rows.map((r) => [r.vin, r]));
     const repaired = (vin: string) => {
@@ -385,10 +455,7 @@ export class Workshop {
 
     const bays = this.registry.baysAt(depotId);
     // lead-approved bookings (S8 proposals) go into their slot first, after runaways
-    const bk = await c.query<{ vin: string; slot: 'TODAY' | 'TOMORROW'; booked_by: string }>(
-      'SELECT vin::text AS vin, slot, booked_by FROM core.queue_booking WHERE depot_id = $1',
-      [depotId],
-    );
+    const bk = { rows: inp.bookings };
     const cands = mergeSignals(signals, ctx);
     // a booked van stays booked even when its signal fades (an at-risk sister is booked *before* it fails)
     const have = new Set(cands.map((x) => x.vin));
@@ -415,7 +482,13 @@ export class Workshop {
         waitDays: b.slot === 'TODAY' ? 0 : b.slot === 'TOMORROW' ? 1 : 2 + Math.floor(waiting++ / Math.max(1, perDay)),
       }));
     }
-    const signature = placed.map((p) => `${p.vin}:${p.rank}:${p.slot}`).join(',');
+    return { placed, bookedBy };
+  }
+
+  /** Store one depot's ranked queue if it changed: items, version, snapshot and the outbox event, in `c`'s tx. */
+  private async write(c: Q, depotId: number, version: number, computed: Computed, at: Date): Promise<Rebuilt> {
+    const { placed, bookedBy } = computed;
+    const signature = signatureOf(placed);
     const before = await c.query<{ s: string | null }>(
       `SELECT string_agg(vin || ':' || rank || ':' || slot, ',' ORDER BY rank) AS s FROM core.queue_item WHERE depot_id = $1`,
       [depotId],
@@ -492,3 +565,74 @@ export class Workshop {
     return { depotId, changed: true, version: next, top };
   }
 }
+
+type Placed = ReturnType<typeof fillBays>[number];
+interface Computed {
+  placed: Placed[];
+  bookedBy: Map<string, string>;
+}
+interface RepairRow {
+  vin: string;
+  repaired_ts: Date;
+  status: string;
+}
+interface IncidentRow {
+  id: string;
+  vin: string;
+  fault_family: string;
+  metric: string | null;
+  severity: Severity;
+  runaway: boolean;
+  hours_to_limit: number | null;
+  deviation: number | null;
+  slope_per_h: number | null;
+  z_slope: number | null;
+  trigger: 'SIGNAL' | 'DTC_RATE';
+  opened_ts: Date;
+}
+interface MemberRow {
+  vin: string;
+  id: string;
+  fault_family: string;
+  member_count: number;
+  depot_id: number;
+  fixed: boolean;
+}
+interface RiskRow {
+  vin: string;
+  id: string;
+  fault_family: string;
+  member_count: number;
+  depot_id: number;
+}
+interface AggRow {
+  vin: string;
+  codes: number;
+  harsh: number | null;
+  driven: number;
+}
+interface BookingRow {
+  depot_id: number;
+  vin: string;
+  slot: 'TODAY' | 'TOMORROW';
+  booked_by: string;
+}
+interface DepotInputs {
+  repairs: RepairRow[];
+  incidents: IncidentRow[];
+  members: MemberRow[];
+  atRisk: RiskRow[];
+  rows: TelemetryRow[];
+  agg: AggRow[];
+  bookings: BookingRow[];
+}
+const emptyInputs = (): DepotInputs => ({
+  repairs: [],
+  incidents: [],
+  members: [],
+  atRisk: [],
+  rows: [],
+  agg: [],
+  bookings: [],
+});
+const signatureOf = (placed: Placed[]) => placed.map((p) => `${p.vin}:${p.rank}:${p.slot}`).join(',');

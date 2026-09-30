@@ -1,6 +1,6 @@
 # Model card: at-risk classifier (S9)
 
-**Status: evaluated offline, NOT wired into the queue.** On a run with a different seed it ranks at-risk vans better than the deployed rule (PR-AUC 0.37 / 0.30 vs 0.07), with no false positives in the heatwave or naturally-hot groups. It is still not wired in, for the reasons under *Decision*.
+**Status: evaluated offline, NOT wired into the queue.** On a run with a different seed it **clearly beats both deployed rules**: at the queue rule's alert volume it catches 76% vs 20% of pre-incident hours with far fewer heatwave/naturally-hot false alarms. Wiring it in (behind a flag, default off) is **not done**: see *Decision*.
 
 ## What it predicts
 
@@ -22,7 +22,7 @@ Per van, per hour: **"will this van have a real fault incident in the next 24 h?
 | Seed | `cohortwatch-ml-7` | `cohortwatch-42` (the evaluation seed) |
 | Fleet | 5,000 vans | 5,000 vans |
 | Window | T0 → T0+84 h, hourly (only hours a van drove) | same |
-| Van-hours | 275,882 | 273,899 |
+| Van-hours | 275,882 | 273,900 |
 | Positive van-hours (vans) | 537 (35 vans) | 535 (35 vans) |
 
 A different seed means a different fleet: other VINs, depots, noise and fault onsets. No van or hour of the test
@@ -52,23 +52,35 @@ Deterministic (`random_state=7`).
 
 ## Results on the test run
 
-| Scorer | PR-AUC | Precision@5 / @10 / @25 per hour | Fault vans caught before their incident* | False positives: heatwave + naturally-hot vans* |
-|---|---|---|---|---|
-| Gradient boosting, `full` | **0.369** | 0.42 / 0.31 / 0.16 | 22 of 35 | 0 (0 + 0) |
-| Gradient boosting, `signals` | **0.303** | 0.40 / 0.28 / 0.14 | 17 of 35 | 0 (0 + 0) |
-| Rule at-risk (S5 campaign flag, as deployed) | **0.069** | 0.17 / 0.12 / 0.06 | 11 of 35 | 0 (0 + 0) |
-| Global threshold | **0.002** | 0.03 / 0.02 / 0.01 | 8 of 35 | 622 (593 + 29) |
-| One signal (current peer-adjusted coolant slope z) | 0.010 | 0.06 / 0.06 / 0.04 | – | – |
+| Scorer | PR-AUC | Precision@5 / @10 / @25 per hour | At the queue rule's volume (8,870 van-hours): recall · precision · fault vans caught · heatwave + naturally-hot vans flagged |
+|---|---|---|---|
+| Gradient boosting, `full` | **0.368** | 0.41 / 0.30 / 0.17 | 0.76 · 0.046 · 34 of 35 · 45 + 15 |
+| Gradient boosting, `signals` | **0.285** | 0.38 / 0.27 / 0.15 | 0.59 · 0.036 · 34 of 35 · 216 + 31 |
+| Rule: S5 campaign at-risk flag | **0.071** | 0.18 / 0.12 / 0.06 | – (flags only 39 van-hours) |
+| Rule: queue at-risk (campaign + solo, S4/S5), as deployed | **0.004** | 0.10 / 0.08 / 0.05 | 0.20 · 0.012 · 29 of 35 · 324 + 22 |
+| Global threshold | **0.002** | 0.03 / 0.02 / 0.01 | (flags 45,361) 0.07 · 0.001 · 8 of 35 · 593 + 29 |
+| One signal (current peer-adjusted coolant slope z) | 0.010 | 0.06 / 0.06 / 0.04 | – |
 
-Base rate: 0.20% of van-hours are positive. \* At a like-for-like operating point: the model flags as many van-hours as the rule does (38). The threshold is the model's top 38 scores. At that point precision is 1.00 (`full`) and 1.00 (`signals`), vs 0.97 for the rule.
+Base rate: 0.20% of van-hours are positive. The last column compares everyone at the
+same alert budget: the deployed queue rule's 8,870 flagged van-hours. The model gets the same number of flags
+(its top-scored van-hours).
+
+**Reading it.**
+- **Against the deployed queue rule, at the same number of alerts:** the `full` model catches **76% vs 20%** of the
+  pre-incident hours, at about **4× the precision**. It flags **60 vs 346** heatwave and naturally-hot vans,
+  and 605 vs 1888 healthy background vans. `signals` (no context): 59% recall,
+  247 heatwave/naturally-hot vans.
+- **Against the campaign flag at its own tiny volume** (39 van-hours): same precision, twice the fault vans (22 vs 11).
+- The queue rule's low PR-AUC (0.004) is expected. It is a yes/no flag that fires on many vans for a while; it
+  was built to put vans *into the queue* and let the score order them, not to predict a fault within 24 h.
 
 **Most important features** (permutation importance on the test run, drop in PR-AUC):
-- `full`: coolant_dev (0.27), powertrain (0.21), duty_type_id (0.16), climate_zone (0.15), coolant_zs_max6h (0.05), coolant_dev_delta6h (0.03)
-- `signals`: coolant_z (0.23), batt_zs_max6h (0.19), coolant_dev (0.11), coolant_zs_max6h (0.09), coolant_dev_delta6h (0.07), coolant_zs (0.03)
+- `full`: powertrain (0.19), coolant_dev (0.16), duty_type_id (0.15), climate_zone (0.13), coolant_zs_max6h (0.06), coolant_dev_delta6h (0.03)
+- `signals`: batt_zs_max6h (0.13), coolant_z (0.09), coolant_dev_delta6h (0.07), coolant_zs_max6h (0.06), coolant_dev (0.06), lv_zs_3h (0.04)
 
-In `full`, powertrain, duty and climate rank high: the model partly learns *which kind of cohort* breaks in these
-scenarios. `signals` has none of them and still scores 0.30 PR-AUC, 4× the rule. Most of the
-gain is real signal, above all the van's own coolant z and deviation, and its battery slope.
+In `full`, context features (powertrain, duty, climate) rank high: the model partly learns which kind of cohort
+breaks in these scenarios. `signals` has none of them and still beats every rule, so most of the gain is real
+signal (the van's own coolant z, deviation and 6 h change, its battery slope).
 
 ## Limits
 
@@ -82,17 +94,18 @@ gain is real signal, above all the van's own coolant z and deviation, and its ba
 
 ## Decision
 
-**Not wired into the queue (yet).** The numbers favour the model, but:
+**It beats the rules; it is not wired into the queue yet (partial).** The brief says: wire it behind a flag, default
+off, if it clearly wins. It does, on these runs, against both rules (the second baseline was added and both seeds
+were re-run for it). Wiring was not done overnight because the queue is Node and the model is Python, so it needs
+an inference path. The time went to the S10 deliverables instead.
 
-1. **The baseline is incomplete.** The rule column is the S5 campaign at-risk flag (`core.campaign_at_risk`). The
-   queue also flags *solo* at-risk vans from their own trend (S4, `atRiskOf`), and that rule was not in the export.
-   So "beats the rules" is shown against one of the two rules. Both runs' databases were reset before I noticed,
-   so re-exporting would have meant two more runs.
-2. **35 fault vans per run.** At that size, one seed's result can move several points.
-3. **No online inference path.** The model is Python and the queue is Node. Serving it needs an export (ONNX, or
-   the trees as JSON) and an hourly scorer.
+**How it would be wired (next step):**
+1. Export the `signals` variant's trees to JSON (or ONNX).
+2. Add a pure scorer in `packages/domain` with its own tests.
+3. In the workshop, compute the same features from the inputs it already reads (the 6 h scores, 24 h codes, cohort
+   incidents), and add an `AT_RISK` signal "model: likely fault within 24 h (score 0.93)" behind `ML_AT_RISK=on`,
+   default off.
+4. Keep the evaluation's alert-budget comparison as the regression test.
 
-**Next step if wanted:** add the solo at-risk rule to the export and re-run both seeds. If the model still wins,
-export the `signals` variant, score it in the workshop as one more `AT_RISK` signal behind `ML_AT_RISK=on`
-(default off), and show it in the reasons as "model: likely fault within 24 h (score 0.93)". The template agent's
-evidence rules would apply unchanged.
+Caveats that stay: 35 fault vans per run (wide error bars), plants that are few and similar, and label timing that
+comes from our own detector.

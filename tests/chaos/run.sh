@@ -17,7 +17,7 @@ log() { echo "$(date +%H:%M:%S) $*" | tee -a "$OUT"; }
 now() { date +%s; }
 
 # reconcile window covering the whole experiment (started in the background, reported at the end)
-LEDGERS=$(for p in 9465 9466 9467 9468; do curl -sf -m 2 "http://localhost:$p/ledger" >/dev/null && printf 'http://localhost:%s/ledger,' "$p"; done)
+LEDGERS=$(for p in 9465 9466 9467 9468; do curl -sf -m 2 "http://localhost:$p/ledger" >/dev/null && printf 'http://localhost:%s/ledger,' "$p"; done; true)
 SECS=$((GAP * 3 + 120))
 node services/normaliser/dist/cli/reconcile.js --seconds "$SECS" --ledger "${LEDGERS%,}" > tests/chaos/reconcile.txt 2>&1 &
 REC=$!
@@ -43,7 +43,7 @@ sleep "$GAP"
 wait "$REC" || true
 log "reconcile over the whole experiment (note: a killed replica's in-memory duplicate counter is lost with it):"
 cat tests/chaos/reconcile.txt | tee -a "$OUT"
-LEDGERS=$(for p in 9465 9466 9467 9468; do curl -sf -m 2 "http://localhost:$p/ledger" >/dev/null && printf 'http://localhost:%s/ledger,' "$p"; done)
+LEDGERS=$(for p in 9465 9466 9467 9468; do curl -sf -m 2 "http://localhost:$p/ledger" >/dev/null && printf 'http://localhost:%s/ledger,' "$p"; done; true)
 log "reconcile, 60 s after the faults (steady state again):"
 node services/normaliser/dist/cli/reconcile.js --seconds 60 --ledger "${LEDGERS%,}" 2>&1 | tail -7 | tee -a "$OUT" || true
 

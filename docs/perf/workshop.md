@@ -61,3 +61,24 @@ anywhere.
   and a sim-hour is 10 wall-seconds at 360×. It kept up, but at 100K (~400 depots) it would not.
 - The fix is known and not done in this step: re-rank only depots whose inputs changed since the last tick
   (repairs, new at-risk rows), and batch the telemetry reads across depots.
+
+## S9 tick scaling
+
+The S4 note above said the hourly tick would not scale: it re-ranked ~120 depots at 30K with 6 queries each.
+S9 changes (commits `20a0826`, `bba8c7b`):
+- one batch of reads for every depot's inputs (7 queries per tick instead of ~7 × 120);
+- fleet-wide telemetry read by time range, not through 30,000 VIN key probes (EXPLAIN in [queries.md](queries.md));
+- every depot re-ranked in memory, and a write transaction only for depots whose ranked queue changed;
+- the event path (one depot per incident / campaign / repair / proposal) is unchanged.
+
+Measured at the same point of two 30K video-preset runs (`AUTO_REPAIRS=on`, `cw_ws_tick_seconds` read at sim T0+87 h):
+
+| Tick | Ticks | Mean | p50 | p95 | Share of ticks |
+|---|---|---|---|---|---|
+| before (S4, run A) | 73 | 8.95 s | 8.09 s | 27.48 s | ≤1 s: 0%, ≤5 s: 18%, ≤10 s: 70% |
+| after (S9, run B) | 86 | 2.31 s | 2.08 s | 5.70 s | ≤1 s: 21%, ≤5 s: 94%, ≤10 s: 100% |
+
+**Reading it.** The mean tick fell **3.9×** (8.95 → 2.31 s) and p95 **4.8×** (27.5 → 5.7 s). Every tick now finishes
+within one sim-hour at 360× (10 wall-seconds). Before, 30% did not, so ticks queued behind each other. p50/p95 are
+interpolated inside the histogram buckets (1, 2.5, 5, 10, 30, 60 s), as Prometheus does. Both runs had the same
+setup; run B also had Prometheus scraping every 5 s, and it ran before the k6 load test started.

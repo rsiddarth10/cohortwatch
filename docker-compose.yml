@@ -101,6 +101,7 @@ services:
       CW_DB: cohortwatch
       CW_SIM_PASSWORD: ${CW_SIM_PASSWORD:-cw_sim_dev}
       CW_APP_PASSWORD: ${CW_APP_PASSWORD:-cw_app_dev}
+      CW_API_PASSWORD: ${CW_API_PASSWORD:-cw_api_dev}
       MIGRATIONS_DIR: /migrations
     volumes:
       - ./infra/db/migrate.sh:/scripts/migrate.sh:ro
@@ -422,6 +423,33 @@ services:
       timeout: 5s
       retries: 12
       start_period: 60s
+    restart: unless-stopped
+
+  auth:
+    # Dev-only local OIDC issuer (ADR 0018): authorization code + PKCE, JWKS, demo users lead/planner/viewer.
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    image: cohortwatch/auth:dev
+    environment:
+      OIDC_ISSUER: ${OIDC_ISSUER:-http://localhost:3200}
+      API_AUDIENCE: urn:cohortwatch:api
+      REDIRECT_URIS: ${OIDC_REDIRECT_URIS:-http://localhost:3000/callback,http://localhost:5173/callback}
+      PORT: 3200
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - '3200:3200'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3200/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     restart: unless-stopped
 
 volumes:

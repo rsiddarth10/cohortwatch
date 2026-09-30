@@ -21,6 +21,15 @@
     },
     {
       "path": "services/workshop"
+    },
+    {
+      "path": "services/auth"
+    },
+    {
+      "path": "services/api"
+    },
+    {
+      "path": "services/agent"
     }
   ]
 }

@@ -12,6 +12,10 @@ COPY services/normaliser/package.json services/normaliser/
 COPY services/state-processor/package.json services/state-processor/
 COPY services/campaign-engine/package.json services/campaign-engine/
 COPY services/workshop/package.json services/workshop/
+COPY services/auth/package.json services/auth/
+COPY services/api/package.json services/api/
+COPY services/agent/package.json services/agent/
+COPY apps/web/package.json apps/web/
 RUN npm ci --no-audit --no-fund
 COPY packages/domain packages/domain
 COPY packages/common packages/common

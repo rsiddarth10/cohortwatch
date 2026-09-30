@@ -9,6 +9,7 @@ set -eu
 : "${CW_DB:=cohortwatch}"
 : "${CW_SIM_PASSWORD:?CW_SIM_PASSWORD is required}"
 : "${CW_APP_PASSWORD:?CW_APP_PASSWORD is required}"
+: "${CW_API_PASSWORD:=cw_api_dev}"
 PGOPTIONS="-c client_min_messages=warning"
 export PGHOST PGUSER PGPASSWORD PGOPTIONS
 DIR="${MIGRATIONS_DIR:-/migrations}"
@@ -34,7 +35,7 @@ SQL
   fi
   echo "apply  $name"
   psql -d "$CW_DB" -v ON_ERROR_STOP=1 -q --single-transaction \
-    -v cw_sim_password="$CW_SIM_PASSWORD" -v cw_app_password="$CW_APP_PASSWORD" -v name="$name" \
+    -v cw_sim_password="$CW_SIM_PASSWORD" -v cw_app_password="$CW_APP_PASSWORD" -v cw_api_password="$CW_API_PASSWORD" -v name="$name" \
     -f "$f" \
     -c "INSERT INTO public.schema_migrations (filename) VALUES ('$name')"
   applied=$((applied + 1))

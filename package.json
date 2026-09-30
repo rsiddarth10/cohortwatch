@@ -13,7 +13,11 @@
     "services/normaliser",
     "services/state-processor",
     "services/campaign-engine",
-    "services/workshop"
+    "services/workshop",
+    "services/auth",
+    "services/api",
+    "services/agent",
+    "apps/web"
   ],
   "scripts": {
     "build": "tsc -b",

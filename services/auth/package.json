@@ -1,0 +1,21 @@
+{
+  "name": "@cw/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "S7 local OIDC issuer (dev only): authorization code + PKCE, JWKS, 3 demo users (lead, planner, viewer); JWT access tokens for the API.",
+  "main": "./dist/main.js",
+  "scripts": {
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@cw/common": "0.1.0",
+    "express": "^5.2.1",
+    "jose": "^6.2.12",
+    "oidc-provider": "^9.12.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/oidc-provider": "^9.12.1"
+  }
+}

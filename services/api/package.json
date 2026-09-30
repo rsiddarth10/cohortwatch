@@ -1,0 +1,32 @@
+{
+  "name": "@cw/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "S7 API: OIDC/JWT roles, Postgres RLS per tenant, viewer masking, audit of every view, keyset pagination, If-Match/409, SSE, rate limits, OpenAPI from zod.",
+  "main": "./dist/main.js",
+  "scripts": {
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
+    "@confluentinc/kafka-javascript": "^1.10.1",
+    "@cw/common": "0.1.0",
+    "@cw/domain": "0.1.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "jose": "^6.2.12",
+    "pg": "^8.23.0",
+    "prom-client": "^15.1.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@testcontainers/redpanda": "^12.2.0",
+    "@types/express": "^5.0.3",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.3.0",
+    "testcontainers": "^12.2.0"
+  }
+}

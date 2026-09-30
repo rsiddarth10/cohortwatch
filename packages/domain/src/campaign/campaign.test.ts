@@ -24,7 +24,7 @@ import { find, union, type Parents } from './unionfind.js';
 const T0 = Date.UTC(2026, 8, 28, 4);
 const P = DEFAULT_CAMPAIGN;
 const KEY = 'COOLING|6|1|10';
-const RATES = { vansInKey: 60, baselinePer1000: 4, regionalPer1000: 1 };
+const RATES = { vansInKey: 60, baselinePer1000: 1, regionalPer1000: 1 }; // the floor (2) applies
 const ctx = (over: Partial<ApplyContext> = {}): ApplyContext => ({
   params: P,
   rates: RATES,

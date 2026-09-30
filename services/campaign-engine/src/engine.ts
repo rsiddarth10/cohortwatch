@@ -63,21 +63,36 @@ export class CampaignEngine {
     }
   }
 
-  /** Current rate of the same family in the same region outside this depot (per 1,000 van-days). */
+  /**
+   * Current rate of the same family among the key's cohort type (same model × duty) in the same region, outside
+   * this depot (per 1,000 van-days): "are the same vans elsewhere in the region doing this too?". A heatwave lifts
+   * them all, so 5 at one depot is not surprising; an outbreak at one depot is.
+   */
   private async regionalPer1000(
     c: Q,
-    family: string,
-    regionId: number,
-    depotId: number,
+    g: { family: string; modelId: number; dutyId: number; regionId: number; depotId: number },
     atTs: number,
   ): Promise<number> {
     const r = await c.query<{ n: number }>(
       `SELECT count(DISTINCT vin)::int AS n FROM core.incident
-       WHERE fault_family = $1 AND region_id = $2 AND depot_id <> $3 AND opened_ts > $4 AND opened_ts <= $5`,
-      [family, regionId, depotId, new Date(atTs - this.params.regionalWindowH * HOUR), new Date(atTs)],
+       WHERE fault_family = $1 AND model_id = $2 AND duty_type_id = $3 AND region_id = $4 AND depot_id <> $5
+         AND opened_ts > $6 AND opened_ts <= $7`,
+      [
+        g.family,
+        g.modelId,
+        g.dutyId,
+        g.regionId,
+        g.depotId,
+        new Date(atTs - this.params.regionalWindowH * HOUR),
+        new Date(atTs),
+      ],
     );
     const days = this.params.regionalWindowH / 24;
-    return ratePer1000(r.rows[0]!.n, this.registry.regionVansExcluding(regionId, depotId), days);
+    return ratePer1000(
+      r.rows[0]!.n,
+      this.registry.cohortInRegionExcluding(g.modelId, g.dutyId, g.regionId, g.depotId),
+      days,
+    );
   }
 
   async onIncident(m: IncidentMessage): Promise<Applied> {
@@ -85,7 +100,17 @@ export class CampaignEngine {
       if (!(await firstTime(c, m.incident_id, m.action, m.seq))) return { duplicate: true, events: [] };
       const book = await loadBook(c, m.family_key);
       const ts = Date.parse(m.event_ts);
-      const regional = await this.regionalPer1000(c, m.fault_family, m.region_id, m.depot_id, ts);
+      const regional = await this.regionalPer1000(
+        c,
+        {
+          family: m.fault_family,
+          modelId: m.model_id,
+          dutyId: m.duty_type_id,
+          regionId: m.region_id,
+          depotId: m.depot_id,
+        },
+        ts,
+      );
       const r = applyIncident(book, m, {
         params: this.params,
         rates: {
@@ -166,7 +191,7 @@ export class CampaignEngine {
     const n = members.length;
     const days = ((g.lastBucket - g.firstBucket + 1) * this.params.bucketH) / 24;
     const vansInKey = Math.max(1, cohort.length);
-    const regionalRate = regional ?? (await this.regionalPer1000(c, g.family, g.regionId, g.depotId, simNow));
+    const regionalRate = regional ?? (await this.regionalPer1000(c, g, simNow));
     const clues: CampaignClue[] = campaignClues(
       members,
       { family: g.family, model: names.model, duty: names.duty, depot: names.depot, unit: metric?.unit ?? '' },

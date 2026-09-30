@@ -9,7 +9,8 @@ export const CampaignParamsSchema = z.object({
   bucketH: z.number().positive().default(24),
   /** Opening: at least minVans distinct vans AND Poisson tail P(X ≥ n | λ) < alpha. */
   minVans: z.number().int().positive().default(5),
-  alpha: z.number().positive().max(1).default(0.001),
+  /** 1e-4 (the reference plan's value): 1e-3 let a synchronised heatwave response open a campaign (S5 tuning). */
+  alpha: z.number().positive().max(1).default(0.0001),
   /** Floor on the expected rate (incidents per 1,000 van-days), so a tiny baseline never makes 5 look huge. */
   rateFloorPer1000: z.number().positive().default(2),
   /** Window for the current regional rate of the same family (outside this depot). */

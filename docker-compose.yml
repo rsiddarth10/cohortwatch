@@ -352,7 +352,7 @@ services:
       # cw_app: detection has no access to schema sim (ground truth)
       DATABASE_URL: postgres://cw_app:${CW_APP_PASSWORD:-cw_app_dev}@postgres:5432/cohortwatch
       GROUP_ID: ${CAMPAIGN_GROUP_ID:-cg.campaign}
-      CAMPAIGN_ALPHA: ${CAMPAIGN_ALPHA:-0.001}
+      CAMPAIGN_ALPHA: ${CAMPAIGN_ALPHA:-0.0001}
       METRICS_PORT: 9475
       LOG_LEVEL: ${LOG_LEVEL:-info}
     # Incidents are low volume: 1 replica. Key = family key keeps one writer per key if scaled (up to 24);

@@ -25,6 +25,7 @@ export const metricOf = (family: string) => METRIC_OF[family] ?? null;
 export class EngineRegistry {
   private cohort = new Map<string, string[]>();
   private regionVans = new Map<number, number>();
+  private cohortRegion = new Map<string, number>();
   private depotVans = new Map<number, number>();
   private baseline = new Map<string, number>();
   private models = new Map<number, { code: string; powertrain: string }>();
@@ -54,15 +55,19 @@ export class EngineRegistry {
     ]);
     const cohort = new Map<string, string[]>();
     const regionVans = new Map<number, number>();
+    const cohortRegion = new Map<string, number>();
     const depotVans = new Map<number, number>();
     for (const r of veh.rows) {
       const k = `${r.model_id}|${r.duty_type_id}|${r.depot_id}`;
       (cohort.get(k) ?? cohort.set(k, []).get(k)!).push(r.vin);
       regionVans.set(r.region_id, (regionVans.get(r.region_id) ?? 0) + 1);
+      const cr = `${r.model_id}|${r.duty_type_id}|${r.region_id}`;
+      cohortRegion.set(cr, (cohortRegion.get(cr) ?? 0) + 1);
       depotVans.set(r.depot_id, (depotVans.get(r.depot_id) ?? 0) + 1);
     }
     this.cohort = cohort;
     this.regionVans = regionVans;
+    this.cohortRegion = cohortRegion;
     this.depotVans = depotVans;
     this.models = new Map(models.rows.map((m) => [m.id, { code: m.code, powertrain: m.powertrain }]));
     this.duties = new Map(duties.rows.map((d) => [d.id, d.code]));
@@ -79,6 +84,12 @@ export class EngineRegistry {
   }
 
   /** Vans in the region outside this depot (the denominator of the current regional rate). */
+  /** Vans of this model × duty in the region outside this depot (denominator of the current regional rate). */
+  cohortInRegionExcluding(modelId: number, dutyId: number, regionId: number, depotId: number): number {
+    const inRegion = this.cohortRegion.get(`${modelId}|${dutyId}|${regionId}`) ?? 0;
+    return Math.max(0, inRegion - this.cohortVins(modelId, dutyId, depotId).length);
+  }
+
   regionVansExcluding(regionId: number, depotId: number): number {
     return Math.max(0, (this.regionVans.get(regionId) ?? 0) - (this.depotVans.get(depotId) ?? 0));
   }

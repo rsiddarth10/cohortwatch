@@ -6,12 +6,15 @@ Each van is compared to **its own normal**, minus what its peers in the same con
 persist become incidents with plain-language clues, and incidents that share a cause become one **campaign**
 (fault family × model × duty × depot). Full scope: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
 
-> Status: **step S3.** Built so far:
+> Status: **step S5** (S4, the queue, is deliberately not built yet). Built so far:
 > - a 100,000-vehicle simulator (planted outbreaks, decoys, realistic mess, two OEM formats, 7 days of history in an
 >   S3 lake, private ground truth);
 > - the normaliser (S2);
 > - the state processor, which compares each van with its own normal minus its peers and raises incidents with
->   clues and runaway flags (S3).
+>   clues and runaway flags (S3);
+> - the campaign engine, which groups incidents per fault family | model | duty | depot, opens a campaign only when
+>   ≥ 5 vans is far more than chance (Poisson, against the same cohort elsewhere in the region), flags at-risk
+>   sisters, and explains itself (firmware clue, similar past campaigns, cost if not fixed) (S5).
 >
 > On the S3 scorecard (N = 5,000): it catches the same real faults as a global threshold (35/35) with 4.1 vs 126
 > false incidents per 1,000 healthy vans. Queue, campaigns, API and UI come in later steps.
@@ -147,6 +150,8 @@ Every choice and timing is in `sim.scenario_manifest`. Ground truth is in `sim.g
 | `npm run sim:reset` | Clears the demo clock, repairs and history; the next start replays from T0 |
 | `npm run normaliser:reconcile [-- --seconds 300]` | Over a window, checks raw in = canonical out + DLQ + duplicates dropped (in/out/DLQ counted in Kafka via the `x-src-*` headers; duplicates from the normaliser's `/ledger`). With several replicas pass `--ledger http://localhost:9465/ledger,http://localhost:9466/ledger` |
 | `npm run eval:incidents` | S3 scorecard (an evaluation tool, runs as `cw_sim`): per ground-truth role, vans flagged by the state processor vs by the simple global threshold, onset → incident hours for both, runaway hours of warning, background false incidents per 1,000 vans. Against the compose stack: `SIM_SCALE=100000 npm run eval:incidents` |
+| `npm run eval:campaigns` | S5 scorecard (runs as `cw_sim`): S1 = 1 campaign, S1b separate, late sisters at-risk before their own incident (lead h), decoys/heatwave/background 0, firmware clue vs the plant, early warning, member counting. Prints the **produced horizon** first. Against the compose stack: `SIM_SCALE=<N> npm run eval:campaigns` |
+| `npm run campaign:dismiss -- --id <campaign id> --reason "..."` | "Not an outbreak": sticky until materially worse (+50% or +3 members, or a runaway member) |
 | `npm run vehicle:normal -- --vin <VIN> [--metric coolant_c]` | One van vs its own normal, hourly (the S8 chart query: `core.telemetry_hourly` joined with the van's baseline band) |
 | `npm run test:integration` | Testcontainers tests against real Redpanda + Redis (+ TimescaleDB for the state processor); needs Docker |
 | `npm run history:big` | Writes 30 days at 2-minute intervals (≈ 1 billion rows at 100K) to its own prefix. Not run by default; needs a lot of disk and time. |
@@ -169,6 +174,7 @@ services remember sequence numbers, so replaying from T0 into an existing stack 
 | `DEPOT_TRANSFER` | off | `on` moves 2 S1 sisters to another depot at T0+30 h |
 | `GLOBAL_COOLANT_THRESHOLD_C` / `GLOBAL_BATT_TEMP_THRESHOLD_C` | 97 / 47 | simple global thresholds: checks #10/#11, and the shadow rule the state processor runs for the evaluation baseline |
 | `STATE_REPLICAS` | 3 | state-processor replicas (up to 48) |
+| `CAMPAIGN_REPLICAS` / `CAMPAIGN_ALPHA` | 1 / 0.0001 | campaign-engine replicas (the relay runs on one leader); Poisson α |
 | `TELEMETRY` / `TELEMETRY_BUCKET_MIN` | on / 60 | telemetry writer on/off; down-sampling bucket in sim-minutes |
 | `DETECT_*`, `RUNAWAY_*`, `DTC_*` | reference plan §9.3–9.5 | detection thresholds (see `services/state-processor/src/config.ts`) |
 | `LAPTOP_RETENTION` / `KAFKA_PARTITION_BYTES` / `BENCH_PARTITION_BYTES` | on / 268435456 / 16777216 | disk caps on the high-volume and bench topics (see [Disk](#disk)) |
@@ -219,6 +225,7 @@ A 100K-van demo writes about 18K msgs/s on average to the raw topics (measured: 
 | `baselines` | built from `batch/baselines/Dockerfile` (Python 3.12 + DuckDB) | S3 batch analytics, one-shot: each van's normal (median/MAD of level and slope), model × duty × region cohorts, usual code rates, fault-rate table → Postgres. Skipped when the history was already processed |
 | `normaliser` | built from `services/normaliser/Dockerfile` | S2: raw OEM feeds → validated, de-duplicated canonical events (Avro) + DLQ. Stateless (per-VIN state in Redis). **3 replicas by default**; `NORMALISER_REPLICAS=N docker compose up -d normaliser` scales it, up to 48 (the input partition count). Measured: [docs/perf/normaliser.md](docs/perf/normaliser.md). |
 | `state-processor` | built from `services/state-processor/Dockerfile` | S3: canonical events → each van vs its own normal, minus its peers, confirmed 4 of 6 → incidents with plain-language clues (`incidents.v1`, key = family key, and `core.incident`); runaway = critical; down-sampled telemetry (`core.telemetry` hypertable + hourly aggregate). Per-VIN state in memory per partition, checkpointed to Redis (ADR 0005). **3 replicas by default** (`STATE_REPLICAS`). Measured: [docs/perf/state-processor.md](docs/perf/state-processor.md). |
+| `campaign-engine` | built from `services/campaign-engine/Dockerfile` | S5: `incidents.v1` → campaigns per family key (Poisson guard with a regional expected rate, join once, union-find), at-risk sisters, clues (firmware, trend, codes, region, cost), similar past campaigns (pgvector); transactional outbox → `campaign.events.v1`. 1 replica by default. Measured: [docs/perf/campaign-engine.md](docs/perf/campaign-engine.md). |
 
 ## Measured (step 1b)
 

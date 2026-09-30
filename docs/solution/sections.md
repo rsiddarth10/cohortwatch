@@ -57,6 +57,21 @@ All of it is pure functions in `packages/domain/src/detect/` (state in → state
 already holds (ADR 0005). Incident writes are upserts on the deterministic id, so a replay re-derives the same
 incident, never a clone.
 
+### S5: campaigns (campaign engine)
+
+Pure functions in `packages/domain/src/campaign/`; one Postgres transaction per incident in the service.
+
+| Step | What | Cost |
+|---|---|---|
+| Family key | `fault_family \| model \| duty \| depot` from the incident's snapshot (event-time depot). `incidents.v1` is keyed by it, so one key = one partition = one writer (ADR 0009) | O(1) |
+| Windows + union-find | 24-h event-time buckets per key. An incident joins the live group whose buckets touch its own (gap ≤ 1 bucket); a bucket bridging two groups unions them (older root, path compression, persisted as `merged_into`). Different depots are different keys, so they never merge | amortised O(α(n)) per union |
+| Join once | A van is a member at most once: `PRIMARY KEY (campaign, vin)` plus a partial unique index "one live campaign per van and family". A replay is dropped by `processed_incident_action(incident_id, action, seq)`; an S3 CLOSE never removes a member | O(1) per incident |
+| Poisson guard | Open only if n ≥ 5 distinct vans **and** P(X ≥ n \| λ) < α = 1e-4, with λ = vans in key × days × max(floor, baseline code rate, **current rate of the same model × duty elsewhere in the region**). The tail is summed in log space (accurate below 1e-12). Below the bar: WATCHING (ADR 0010) | O(n) |
+| At-risk sisters | Non-members of the key with peer-adjusted z_level ≥ 1.5 in 3 of the last 4 hourly rows, or z_slope ≥ 2 with a positive deviation. Re-evaluated on every change and once per sim-hour (ADR 0011) | O(vans in key × 4) |
+| Firmware clue | Share of members that got version X in the 3 days before **their** first incident, vs the share of non-member sisters that got X in the 3 days before the **campaign's** first incident (same window length). Shown if ≥ 60% of members and a gap ≥ 30 points | O(installs in key) |
+| Override | "Not an outbreak" is sticky; re-raised only when members reach min(+50%, +3) or a member turns runaway | O(1) |
+| Outbox | Campaign change + outbox row in one transaction; the leader's relay publishes to `campaign.events.v1` (id = uuid5(campaign, type, version)) (ADR 0012) | O(events) |
+
 ## 11 AI / ML
 
 **Model per van, not one rule for the fleet (S3).** CohortWatch fits a small statistical model to every van and
@@ -80,3 +95,10 @@ van's model, not about a threshold.
 
 **Planned (S9):** an ML at-risk classifier trained on history + labels, evaluated against this per-van rule model
 and the global threshold.
+
+**Similar past campaigns (S5).** Each campaign is described by a 31-dimensional feature vector: fault family,
+powertrain, duty, climate, log members, typical deviation and trend, and the mix of fault codes, with block
+weights so the family counts most. Top 3 by cosine similarity (pgvector HNSW `<=>`) against 30 synthetic past
+campaigns, each with a root cause and a resolution note (ADR 0013). No external embedding API: it is deterministic,
+explainable (named features) and needs no data to leave the system. A learned embedding could replace the vector
+later without changing the query.

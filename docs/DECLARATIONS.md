@@ -45,7 +45,8 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | Vitest, `@vitest/coverage-v8` | MIT | Unit tests and coverage |
 | ESLint, `typescript-eslint`, `@eslint/js`, `globals`, `eslint-config-prettier` | MIT | Linting |
 | Prettier | MIT | Formatting |
-| `testcontainers`, `@testcontainers/redpanda` | MIT | Integration tests against real Redpanda + Redis containers (from S2) |
+| `testcontainers`, `@testcontainers/redpanda` | MIT | Integration tests against real Redpanda + Redis (+ TimescaleDB from S3) containers (from S2) |
+| `@amiceli/vitest-cucumber` 8.0.0 | ISC | BDD: Gherkin feature files (`tests/bdd/*.feature`) run inside Vitest (S5) |
 
 ### Infrastructure images
 
@@ -71,3 +72,7 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 ## Data
 
 Synthetic only. No real people, vehicles, addresses, OEM data or personal data. VIN manufacturer codes (`7AX`, `7KS`) and all names are fictitious.
+
+**Past campaigns (S5).** The 30 "similar past campaigns" in `core.past_campaign` are **synthetic and fictional**. They are generated deterministically from 13 templates in `packages/domain/src/campaign/similarity.ts`; their codes (`PC-2024-101` …), root causes and resolution notes describe no real recall or supplier. Similarity uses a numeric feature vector and pgvector (part of the TimescaleDB HA image), with no external embedding API.
+
+**Money (S5).** The "cost if not fixed" rates (tow ₹8,000, 3 downtime days × ₹6,000, unplanned-repair premium ₹25,000, planned fix ₹12,000 per van) are illustrative assumptions in config, not market data.

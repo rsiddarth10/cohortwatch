@@ -2,7 +2,7 @@
 
 Every piece of evidence in one place (2026-10-01). CI runs install → lint → typecheck → unit + coverage → contract,
 plus integration tests (Testcontainers), a Python batch test, Semgrep and Trivy, on every push:
-[latest green run](https://github.com/rsiddarth10/cohortwatch/actions/runs/36782476939) ·
+[green run of the tagged commit `v1.0-submission`](https://github.com/rsiddarth10/cohortwatch/actions/runs/36790833718) ·
 [all runs](https://github.com/rsiddarth10/cohortwatch/actions).
 
 ## Tests

@@ -1,6 +1,6 @@
 # Overnight report 3: Step 10 (submission deliverables)
 
-Run: 2026-10-01 03:58 → ~05:00 IST (hard stop 10:00). Plan: [docs/plans/s10.md](plans/s10.md). No feature work; no
+Run: 2026-10-01 03:58 → 05:05 IST (hard stop 10:00; finished early). Plan: [docs/plans/s10.md](plans/s10.md). No feature work; no
 refactors. S9 closed first ([overnight-report-2.md](overnight-report-2.md)).
 
 ## Done-check
@@ -16,7 +16,7 @@ refactors. S9 closed first ([overnight-report-2.md](overnight-report-2.md)).
 | 7 | README final pass | **done** | What it is (3 lines + architecture image), 5-minute quick start (30K + `AUTO_REPAIRS`), honest 100K laptop note, logins, story walkthrough, documentation index, test commands, known issues; settings table completed |
 | 8 | DECLARATIONS final pass | **done** | Libraries with licences incl. S9–S10 tooling; AI tool use and the author's role; SBOM reference; synthetic data statement |
 | 9 | Missing evidence | **done** | See below |
-| 10 | Tag `v1.0-submission` | TAG_STATUS | TAG_EVIDENCE |
+| 10 | Tag `v1.0-submission` | **done** | Annotated tag on `1ca96d4`, pushed after the clean clone passed and **CI was green on that commit** (lint, typecheck, unit + coverage, Pact consumer, integration incl. the Pact provider, Python batch, Semgrep, Trivy): [run 36790833718](https://github.com/rsiddarth10/cohortwatch/actions/runs/36790833718). The clean clone ran at `5642156`. Later commits changed docs, deploy and the web image; the new web image (unprivileged nginx + security headers) was rebuilt from the pulled commits in the clone stack and verified (200 OK as uid 101, the viewer e2e passed, ZAP re-scanned) |
 
 ### Item 9 in detail
 
@@ -51,7 +51,7 @@ refactors. S9 closed first ([overnight-report-2.md](overnight-report-2.md)).
 6. **TimescaleDB self-managed on EKS in Terraform**, not RDS (no TimescaleDB extension on RDS). Timescale Cloud is
    the documented alternative.
 7. **Cost estimate** from on-demand list prices (ap-south-1), marked rough (±30%).
-8. **CI turned red** after the Terraform push (Trivy IaC CRITICALs); fixed within the hour (commit `204132c`).
+8. **CI turned red twice** and was fixed both times: Trivy IaC CRITICALs after the Terraform push (fixed in `204132c`), then Prettier failing on the Helm Go templates, which are not YAML (fixed in `1ca96d4`). The tag is on the first fully green commit.
 9. **The e2e lead test timed out once** on the clean clone, when run long after the story moment (it waits for a
    pending proposal). Its earlier run on the same stack passed, and the viewer test passed with the new CSP.
 

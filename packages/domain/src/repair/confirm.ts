@@ -72,3 +72,15 @@ export function judgeRepair(repairTs: number, rows: readonly HourRow[], nowTs: n
     text: `pending: ${n} driven hour${n === 1 ? '' : 's'} since the repair, ${inside} of the last ${recent.length} inside its normal`,
   };
 }
+
+/** The `workshop.outcomes.v1` message (key = VIN): a confirmed repair outcome (S6 → campaign close in S5). */
+export const RepairOutcomeMessageSchema = z.object({
+  repair_id: z.uuid(),
+  vin: z.string().length(17),
+  outcome: z.enum(['FIXED', 'NOT_FIXED']),
+  repaired_ts: z.string(),
+  decided_ts: z.string(),
+  driven_hours: z.number().int().nonnegative(),
+  text: z.string(),
+});
+export type RepairOutcomeMessage = z.infer<typeof RepairOutcomeMessageSchema>;

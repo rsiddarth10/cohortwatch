@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { createLogger } from '@cw/common';
-import { IncidentMessageSchema, type CampaignEvent } from '@cw/domain';
+import { IncidentMessageSchema, RepairOutcomeMessageSchema, type CampaignEvent } from '@cw/domain';
 import pg from 'pg';
 import { loadConfig, type EngineConfig } from './config.js';
 import { CampaignEngine } from './engine.js';
@@ -81,7 +81,7 @@ export async function startCampaignEngine(c: EngineConfig, hooks: EngineHooks = 
   });
   const producer = kafka.producer({ 'linger.ms': 5, kafkaJS: { idempotent: true, acks: -1 } });
   await producer.connect();
-  const relay = new OutboxRelay(pool, producer, c.OUTBOX_BATCH);
+  const relay = new OutboxRelay(pool, producer, c.OUTBOX_BATCH, [c.OUTPUT_TOPIC]);
   const leader = new Leader(pool);
 
   const countEvents = (events: readonly CampaignEvent[]) => {
@@ -155,8 +155,9 @@ export async function startCampaignEngine(c: EngineConfig, hooks: EngineHooks = 
   });
   const admin = kafka.admin();
   await Promise.all([consumer.connect(), admin.connect()]);
-  await consumer.subscribe({ topics: [c.INPUT_TOPIC] });
-  const owned = (p: number) => consumer.assignment().some((a) => a.topic === c.INPUT_TOPIC && a.partition === p);
+  await consumer.subscribe({ topics: [c.INPUT_TOPIC, c.OUTCOMES_TOPIC] });
+  const owned = (p: number, topic = c.INPUT_TOPIC) =>
+    consumer.assignment().some((a) => a.topic === topic && a.partition === p);
   const processed = new Map<number, bigint>();
 
   // back-pressure: pause while the outbox backlog is large (the relay or Kafka is behind)
@@ -208,6 +209,17 @@ export async function startCampaignEngine(c: EngineConfig, hooks: EngineHooks = 
       }, c.BATCH_TIMEOUT_MS);
       try {
         for (const msg of batch.messages) {
+          if (batch.topic === c.OUTCOMES_TOPIC) {
+            const o = RepairOutcomeMessageSchema.safeParse(msg.value ? JSON.parse(msg.value.toString()) : null);
+            if (!o.success) {
+              metrics.incidents.inc({ action: 'outcome', result: 'bad' });
+              continue;
+            }
+            const r = await retry('outcome transaction', () => engine.onOutcome(o.data));
+            metrics.incidents.inc({ action: 'outcome', result: r.duplicate ? 'duplicate' : 'applied' });
+            countEvents(r.events);
+            continue;
+          }
           const parsed = IncidentMessageSchema.safeParse(msg.value ? JSON.parse(msg.value.toString()) : null);
           if (!parsed.success) {
             metrics.incidents.inc({ action: 'unknown', result: 'bad' });
@@ -236,13 +248,13 @@ export async function startCampaignEngine(c: EngineConfig, hooks: EngineHooks = 
         clearTimeout(watchdog);
       }
       // A pause() also marks batches stale; only a revoke means the position must not move.
-      if (isStale() && !owned(p)) return;
+      if (isStale() && !owned(p, batch.topic)) return;
       const next = (BigInt(last) + 1n).toString();
       await consumer.commitOffsets([{ topic: batch.topic, partition: p, offset: next }]).catch((err: unknown) => {
         log.info({ partition: p, err: String(err) }, 'commit failed (partition moved?)');
       });
       resolveOffset(last);
-      processed.set(p, BigInt(next));
+      if (batch.topic === c.INPUT_TOPIC) processed.set(p, BigInt(next));
       end();
     },
   });

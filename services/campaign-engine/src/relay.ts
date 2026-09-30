@@ -46,15 +46,17 @@ export class OutboxRelay {
     private readonly pool: pg.Pool,
     private readonly producer: KafkaJS.Producer,
     private readonly batch: number,
+    /** Only these topics: other services (S4/S6 workshop) run their own relay on the same table. */
+    private readonly topics: readonly string[],
   ) {}
 
   /** Publish one batch; returns how many rows were published and their created→published delays (ms). */
   async publishOnce(): Promise<{ published: number; delaysMs: number[] }> {
     const rows = (
       await this.pool.query<{ id: string; topic: string; key: string; payload: unknown; created_at: Date }>(
-        `SELECT id, topic, key, payload, created_at FROM core.outbox WHERE published_at IS NULL
+        `SELECT id, topic, key, payload, created_at FROM core.outbox WHERE published_at IS NULL AND topic = ANY($2)
          ORDER BY created_at, id LIMIT $1`,
-        [this.batch],
+        [this.batch, this.topics],
       )
     ).rows;
     if (rows.length === 0) return { published: 0, delaysMs: [] };
@@ -73,7 +75,8 @@ export class OutboxRelay {
 
   async backlog(): Promise<number> {
     const r = await this.pool.query<{ n: number }>(
-      'SELECT count(*)::int AS n FROM core.outbox WHERE published_at IS NULL',
+      'SELECT count(*)::int AS n FROM core.outbox WHERE published_at IS NULL AND topic = ANY($1)',
+      [this.topics],
     );
     return r.rows[0]!.n;
   }

@@ -7,6 +7,8 @@ export const EngineConfigSchema = z.object({
   /** cw_app: detection never reads sim.* (enforced by the role). */
   DATABASE_URL: z.string().default('postgres://cw_app:cw_app_dev@localhost:15432/cohortwatch'),
   INPUT_TOPIC: z.string().default('incidents.v1'),
+  /** S6 repair outcomes (FIXED/NOT_FIXED): a campaign closes when all its members are fixed. */
+  OUTCOMES_TOPIC: z.string().default('workshop.outcomes.v1'),
   OUTPUT_TOPIC: z.string().default('campaign.events.v1'),
   GROUP_ID: z.string().default('cg.campaign'),
   FROM_BEGINNING: z.enum(['true', 'false']).default('true'),

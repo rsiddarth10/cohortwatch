@@ -1,5 +1,6 @@
 import {
   applyIncident,
+  applyOutcome,
   atRiskChanged,
   atRiskOf,
   campaignClues,
@@ -15,6 +16,7 @@ import {
   type HourlyScore,
   type IncidentMessage,
   type Install,
+  type RepairOutcomeMessage,
 } from '@cw/domain';
 import type pg from 'pg';
 import { metricOf, type EngineRegistry } from './registry.js';
@@ -271,6 +273,34 @@ export class CampaignEngine {
       all.push(...events);
     }
     return all;
+  }
+
+  /**
+   * S6 outcome of a member's repair: FIXED marks it; a campaign closes (CLOSED event) only when every member is
+   * FIXED; NOT_FIXED keeps it open. Idempotent via processed_incident_action (repair id, outcome).
+   */
+  async onOutcome(o: RepairOutcomeMessage): Promise<Applied> {
+    return this.tx(async (c) => {
+      if (!(await firstTime(c, o.repair_id, `OUTCOME_${o.outcome}`, 0))) return { duplicate: true, events: [] };
+      const ids = (
+        await c.query<{ id: string }>(
+          `SELECT g.id FROM core.campaign g JOIN core.campaign_member m ON m.campaign_id = g.id AND m.active
+           WHERE m.vin = $1 AND g.status IN ('WATCHING', 'OPEN', 'DISMISSED') FOR UPDATE OF g`,
+          [o.vin],
+        )
+      ).rows;
+      const events: CampaignEvent[] = [];
+      for (const { id } of ids) {
+        const g = await loadGroup(c, id);
+        if (!g) continue;
+        const r = applyOutcome(g, o.vin, o.outcome, Date.parse(o.decided_ts));
+        if (r.group === g) continue;
+        await saveGroups(c, [r.group]);
+        events.push(...r.events);
+      }
+      await enqueue(c, this.topic, events, (e) => ({ id: e.campaignId, familyKey: e.familyKey }));
+      return { duplicate: false, events };
+    });
   }
 
   /** "Not an outbreak" (sticky): override row + campaign + outbox in one transaction. */

@@ -18,6 +18,7 @@ const REDPANDA_IMAGE = 'docker.redpanda.com/redpandadata/redpanda:v24.2.7';
 const PG_IMAGE = 'timescale/timescaledb-ha:pg16.15-ts2.30.1';
 const IN = 'incidents.v1';
 const OUT = 'campaign.events.v1';
+const OUTCOMES = 'workshop.outcomes.v1';
 const T0 = Date.parse('2026-09-28T04:00:00Z');
 const HOUR = 3_600_000;
 
@@ -162,6 +163,7 @@ beforeAll(async () => {
     topics: [
       { topic: IN, numPartitions: 3, replicationFactor: 1 },
       { topic: OUT, numPartitions: 3, replicationFactor: 1 },
+      { topic: OUTCOMES, numPartitions: 2, replicationFactor: 1 },
     ],
   });
   await admin.disconnect();
@@ -232,5 +234,40 @@ describe('campaign engine against real Redpanda + TimescaleDB', () => {
     const ev = await running.engine.dismiss(id, 'lead', 'known thermostat batch');
     expect(ev.map((e) => e.type)).toEqual(['DISMISSED']);
     expect(await count(`SELECT count(*) AS n FROM core.campaign_override`)).toBe(1);
+
+    // S6: repair outcomes. 9 FIXED + 1 NOT_FIXED keep it open; a replay changes nothing; the last FIXED closes it
+    const outcome = (i: number, result: 'FIXED' | 'NOT_FIXED', repair = i) => ({
+      repair_id: `00000000-0000-5000-b000-${String(repair).padStart(12, '0')}`,
+      vin: sister(i),
+      outcome: result,
+      repaired_ts: new Date(T0 + 30 * HOUR).toISOString(),
+      decided_ts: new Date(T0 + 50 * HOUR).toISOString(),
+      driven_hours: 12,
+      text: 't',
+    });
+    const producer = kafka.producer({ kafkaJS: { acks: -1 } });
+    await producer.connect();
+    const send = (os: ReturnType<typeof outcome>[]) =>
+      producer.send({ topic: OUTCOMES, messages: os.map((o) => ({ key: o.vin, value: JSON.stringify(o) })) });
+    const fixedOf = () => count(`SELECT count(*) AS n FROM core.campaign_member WHERE fixed AND active`);
+    const members = [0, 1, 2, 3, 4, 5, 6, 8, 10]; // + sister 9 (sister 7 never reported)
+    await send([...members.map((i) => outcome(i, 'FIXED')), outcome(9, 'NOT_FIXED')]);
+    await waitFor(async () => (await fixedOf()) === 9);
+    await send([outcome(0, 'FIXED')]); // replay
+    expect(await count(`SELECT count(*) AS n FROM core.campaign WHERE id = $1 AND status = 'DISMISSED'`, [id])).toBe(1);
+    await send([outcome(9, 'FIXED', 99)]); // a second repair of the last van holds
+    await waitFor(
+      async () =>
+        (await count(`SELECT count(*) AS n FROM core.campaign WHERE id = $1 AND status = 'CLOSED'`, [id])) === 1,
+    );
+    await producer.disconnect();
+    expect(await count(`SELECT count(*) AS n FROM core.campaign_member WHERE campaign_id = $1 AND active`, [id])).toBe(
+      0,
+    );
+    const types = (await pool.query<{ t: string }>(`SELECT payload->>'type' AS t FROM core.outbox`)).rows.map(
+      (r) => r.t,
+    );
+    expect(types.filter((t) => t === 'FIX_PROGRESS')).toHaveLength(9);
+    expect(types.filter((t) => t === 'CLOSED')).toHaveLength(1);
   });
 });

@@ -39,6 +39,7 @@ interface MemberRow {
   slope_per_h: number | null;
   last_code: string | null;
   firmware: string | null;
+  fixed: boolean;
 }
 
 const toGroup = (r: CampaignRow, members: Record<string, Member>): Group => ({
@@ -67,7 +68,7 @@ const toGroup = (r: CampaignRow, members: Record<string, Member>): Group => ({
 async function withMembers(c: Q, rows: CampaignRow[]): Promise<Group[]> {
   if (rows.length === 0) return [];
   const m = await c.query<MemberRow>(
-    `SELECT campaign_id, vin::text AS vin, first_incident_id, joined_ts, runaway, deviation, slope_per_h, last_code, firmware
+    `SELECT campaign_id, vin::text AS vin, first_incident_id, joined_ts, runaway, deviation, slope_per_h, last_code, firmware, fixed
      FROM core.campaign_member WHERE campaign_id = ANY($1) AND active`,
     [rows.map((r) => r.id)],
   );
@@ -83,6 +84,7 @@ async function withMembers(c: Q, rows: CampaignRow[]): Promise<Group[]> {
       slopePerH: x.slope_per_h,
       lastCode: x.last_code,
       firmware: x.firmware,
+      fixed: x.fixed,
     };
   }
   return rows.map((r) => toGroup(r, by.get(r.id) ?? {}));
@@ -91,7 +93,7 @@ async function withMembers(c: Q, rows: CampaignRow[]): Promise<Group[]> {
 /** The live groups of one family key (MERGED/CLOSED are history). */
 export async function loadBook(c: Q, key: string): Promise<KeyBook> {
   const rows = await c.query<CampaignRow>(
-    `SELECT * FROM core.campaign WHERE family_key = $1 AND status NOT IN ('MERGED', 'CLOSED')`,
+    `SELECT * FROM core.campaign WHERE family_key = $1 AND status NOT IN ('MERGED', 'CLOSED') FOR UPDATE`,
     [key],
   );
   const groups = await withMembers(c, rows.rows);
@@ -145,16 +147,17 @@ export async function saveGroups(c: Q, groups: readonly Group[]): Promise<void> 
         g.version,
       ],
     ); // prettier-ignore
-    if (g.status === 'MERGED') {
+    if (g.status === 'MERGED' || g.status === 'CLOSED') {
+      // merged: its members moved to the root; closed: they may join a new campaign later
       await c.query('UPDATE core.campaign_member SET active = false WHERE campaign_id = $1', [g.id]);
       continue;
     }
     for (const m of Object.values(g.members)) {
       await c.query(
         `INSERT INTO core.campaign_member (campaign_id, vin, fault_family, first_incident_id, joined_ts, runaway,
-           deviation, slope_per_h, last_code, firmware)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (campaign_id, vin) DO UPDATE SET runaway = EXCLUDED.runaway, active = true`,
+           deviation, slope_per_h, last_code, firmware, fixed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (campaign_id, vin) DO UPDATE SET runaway = EXCLUDED.runaway, fixed = EXCLUDED.fixed, active = true`,
         [
           g.id,
           m.vin,
@@ -166,6 +169,7 @@ export async function saveGroups(c: Q, groups: readonly Group[]): Promise<void> 
           m.slopePerH,
           m.lastCode,
           m.firmware,
+          Boolean(m.fixed),
         ],
       );
       // a new member is no longer "at risk" in this campaign

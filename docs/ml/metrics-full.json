@@ -1,0 +1,191 @@
+{
+  "train": {
+    "file": "/data/train-seed7-5k.csv.gz",
+    "van_hours": 275882,
+    "vans": 5000,
+    "positives": 537,
+    "positive_vans": 35
+  },
+  "test": {
+    "file": "/data/test-seed42-5k.csv.gz",
+    "van_hours": 273899,
+    "vans": 5000,
+    "positives": 535,
+    "positive_vans": 35,
+    "fault_vans": 35
+  },
+  "pr_auc": {
+    "model": 0.3686667949205509,
+    "rule_at_risk": 0.06915709647403662,
+    "global_threshold": 0.0018740393696432896,
+    "coolant_zs_score": 0.010103574303496279,
+    "base_rate": 0.001953274747260852
+  },
+  "precision_at_k": {
+    "5": {
+      "model": 0.4185185185185184,
+      "rule_at_risk": 0.17407407407407408,
+      "global_threshold": 0.02592592592592593,
+      "coolant_zs_score": 0.05925925925925926
+    },
+    "10": {
+      "model": 0.3074074074074076,
+      "rule_at_risk": 0.12037037037037036,
+      "global_threshold": 0.020370370370370372,
+      "coolant_zs_score": 0.061111111111111116
+    },
+    "25": {
+      "model": 0.1614814814814814,
+      "rule_at_risk": 0.061481481481481484,
+      "global_threshold": 0.012592592592592593,
+      "coolant_zs_score": 0.039259259259259265
+    }
+  },
+  "operating_point": {
+    "threshold": 0.9929509097490993,
+    "model": {
+      "flagged_van_hours": 40,
+      "precision": 1.0,
+      "recall": 0.07476635514018691,
+      "fault_vans_caught_before_incident": 22,
+      "false_positives": {
+        "heatwave_region": {
+          "van_hours_flagged": 0,
+          "vans_flagged": 0,
+          "vans": 704
+        },
+        "naturally_hot": {
+          "van_hours_flagged": 0,
+          "vans_flagged": 0,
+          "vans": 38
+        },
+        "background": {
+          "van_hours_flagged": 0,
+          "vans_flagged": 0,
+          "vans": 4158
+        }
+      }
+    },
+    "rule_at_risk": {
+      "flagged_van_hours": 38,
+      "precision": 0.9736842105263158,
+      "recall": 0.0691588785046729,
+      "fault_vans_caught_before_incident": 11,
+      "false_positives": {
+        "heatwave_region": {
+          "van_hours_flagged": 0,
+          "vans_flagged": 0,
+          "vans": 704
+        },
+        "naturally_hot": {
+          "van_hours_flagged": 0,
+          "vans_flagged": 0,
+          "vans": 38
+        },
+        "background": {
+          "van_hours_flagged": 0,
+          "vans_flagged": 0,
+          "vans": 4158
+        }
+      }
+    },
+    "global_threshold": {
+      "flagged_van_hours": 45361,
+      "precision": 0.0008377240360662243,
+      "recall": 0.07102803738317758,
+      "fault_vans_caught_before_incident": 8,
+      "false_positives": {
+        "heatwave_region": {
+          "van_hours_flagged": 22603,
+          "vans_flagged": 593,
+          "vans": 704
+        },
+        "naturally_hot": {
+          "van_hours_flagged": 1634,
+          "vans_flagged": 29,
+          "vans": 38
+        },
+        "background": {
+          "van_hours_flagged": 20713,
+          "vans_flagged": 685,
+          "vans": 4158
+        }
+      }
+    }
+  },
+  "feature_importance_note": "HistGradientBoosting has no built-in importances; see permutation_importance",
+  "variant": "full",
+  "features": [
+    "coolant_dev",
+    "coolant_z",
+    "coolant_zs",
+    "batt_dev",
+    "batt_z",
+    "batt_zs",
+    "lv_dev",
+    "lv_zs",
+    "dtc_count",
+    "harsh_count",
+    "ambient_c",
+    "readings",
+    "coolant_zs_3h",
+    "coolant_zs_max6h",
+    "coolant_dev_delta6h",
+    "batt_zs_3h",
+    "batt_zs_max6h",
+    "batt_dev_delta6h",
+    "lv_zs_3h",
+    "dtc_24h",
+    "dtc_6h",
+    "harsh_24h",
+    "cohort_incidents_24h",
+    "cohort_campaign_open",
+    "own_incident_open",
+    "powertrain",
+    "climate_zone",
+    "duty_type_id"
+  ],
+  "seconds": 9.9,
+  "top_features": [
+    [
+      "coolant_dev",
+      0.2661
+    ],
+    [
+      "powertrain",
+      0.2149
+    ],
+    [
+      "duty_type_id",
+      0.1644
+    ],
+    [
+      "climate_zone",
+      0.1533
+    ],
+    [
+      "coolant_zs_max6h",
+      0.0517
+    ],
+    [
+      "coolant_dev_delta6h",
+      0.0342
+    ],
+    [
+      "ambient_c",
+      0.0253
+    ],
+    [
+      "coolant_z",
+      0.0209
+    ],
+    [
+      "harsh_24h",
+      0.0154
+    ],
+    [
+      "lv_zs_3h",
+      0.0129
+    ]
+  ]
+}

@@ -40,7 +40,9 @@ CATEGORICAL = ["powertrain", "climate_zone", "duty_type_id"]
 
 def load(path: str) -> pd.DataFrame:
     df = pd.read_csv(path, compression="gzip", low_memory=False)
-    for b in BOOLEAN + ["rule_at_risk", "rule_global", "gt_fault"]:
+    if "rule_queue_at_risk" not in df.columns:
+        df["rule_queue_at_risk"] = False
+    for b in BOOLEAN + ["rule_at_risk", "rule_queue_at_risk", "rule_global", "gt_fault"]:
         df[b] = df[b].astype(str).str.lower().isin(["true", "t", "1"])
     return df
 
@@ -111,12 +113,15 @@ def main() -> None:
     p = model.predict_proba(xte)[:, 1]
 
     rule = te["rule_at_risk"].values
+    qrule = te["rule_queue_at_risk"].values
     glob = te["rule_global"].values
     zs = te["coolant_zs"].fillna(-99).astype(float).values
     n_rule = int(rule.sum())
     # like-for-like operating point: flag as many van-hours as the rule does (or 0.5 if the rule flags nothing)
     thr = float(np.sort(p)[::-1][n_rule - 1]) if n_rule > 0 else 0.5
     ml_flag = p >= thr
+    n_q = int(qrule.sum())
+    thr_q = float(np.sort(p)[::-1][n_q - 1]) if n_q > 0 else 0.5
 
     fault_vans = te.loc[te["gt_fault"], "vin"].nunique()
     result = {
@@ -127,6 +132,7 @@ def main() -> None:
         "pr_auc": {
             "model": float(average_precision_score(yte, p)),
             "rule_at_risk": float(average_precision_score(yte, rule.astype(float))),
+            "rule_queue_at_risk": float(average_precision_score(yte, qrule.astype(float))),
             "global_threshold": float(average_precision_score(yte, glob.astype(float))),
             "coolant_zs_score": float(average_precision_score(yte, zs)),
             "base_rate": float(yte.mean()),
@@ -135,6 +141,7 @@ def main() -> None:
             str(k): {
                 "model": precision_at_k(te, p, k),
                 "rule_at_risk": precision_at_k(te, rule.astype(float) + 1e-9 * zs, k),
+                "rule_queue_at_risk": precision_at_k(te, qrule.astype(float) + 1e-9 * zs, k),
                 "global_threshold": precision_at_k(te, glob.astype(float) + 1e-9 * zs, k),
                 "coolant_zs_score": precision_at_k(te, zs, k),
             }
@@ -144,6 +151,8 @@ def main() -> None:
             "threshold": thr,
             "model": binary_report(te, ml_flag),
             "rule_at_risk": binary_report(te, rule),
+            "rule_queue_at_risk": binary_report(te, qrule),
+            "model_at_queue_rule_volume": binary_report(te, p >= thr_q),
             "global_threshold": binary_report(te, glob),
         },
         "feature_importance_note": "HistGradientBoosting has no built-in importances; see permutation_importance",

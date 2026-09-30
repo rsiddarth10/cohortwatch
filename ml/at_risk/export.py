@@ -66,7 +66,7 @@ tel AS (
 cohort_inc AS (  -- incidents per (model, duty, depot) cohort, for "how many peers went faulty in the last 24 h"
   SELECT i.vin, i.opened_ts, v.model_id, v.duty_type_id, v.depot_id FROM core.incident i JOIN v ON v.vin = i.vin
 )
-SELECT tel.*, v.model_id, v.duty_type_id, v.powertrain, v.climate_zone,
+SELECT tel.*, v.model_id, v.duty_type_id, v.powertrain, v.climate_zone, v.depot_id,
   (SELECT count(*) FROM cohort_inc c WHERE c.model_id = v.model_id AND c.duty_type_id = v.duty_type_id
      AND c.depot_id = v.depot_id AND c.vin <> tel.vin
      AND c.opened_ts > tel.ts - interval '24 hours' AND c.opened_ts <= tel.ts + interval '1 hour') AS cohort_incidents_24h,
@@ -97,6 +97,15 @@ def main() -> None:
             df = pd.DataFrame(cur.fetchall(), columns=cols)
             cur.execute("SELECT count(*) FROM core.vehicle")
             fleet = cur.fetchone()[0]
+            # the queue's full at-risk rule (campaign at-risk + solo at-risk from the van's own trend, S4/S5):
+            # the VINs with an AT_RISK reason in each depot snapshot
+            cur.execute(
+                """SELECT s.depot_id, s.as_of_ts, s.version,
+                          coalesce((SELECT array_agg(i->>'vin') FROM jsonb_array_elements(s.items) i
+                                    WHERE i->'reasons' ? 'AT_RISK'), '{}') AS vins
+                   FROM core.queue_snapshot s ORDER BY s.as_of_ts, s.version"""
+            )
+            snaps = pd.DataFrame(cur.fetchall(), columns=["depot_id", "as_of_ts", "version", "vins"])
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
     df["gt_event_ts"] = pd.to_datetime(df["gt_event_ts"], utc=True)
     # a row describes the hour starting at ts; the decision is made at its end, tau = ts + 1 h (features use
@@ -114,6 +123,15 @@ def main() -> None:
         & (df["gt_event_ts"] > tau)
         & (df["gt_event_ts"] <= tau + pd.Timedelta(hours=24))
     ).astype(int)
+    # evaluation only: was the van flagged AT_RISK in its depot's latest queue snapshot at decision time?
+    snaps["as_of_ts"] = pd.to_datetime(snaps["as_of_ts"], utc=True)
+    snaps = snaps.sort_values("as_of_ts")
+    df["tau"] = df["ts"] + pd.Timedelta(hours=1)
+    df = df.sort_values("tau")
+    m = pd.merge_asof(df[["tau", "depot_id", "vin"]], snaps[["as_of_ts", "depot_id", "vins"]], left_on="tau",
+                      right_on="as_of_ts", by="depot_id", direction="backward")  # fmt: skip
+    df["rule_queue_at_risk"] = [isinstance(vs, list) and v in vs for v, vs in zip(m["vin"].values, m["vins"].values)]
+    df = df.drop(columns=["tau"])
     df["fleet"] = fleet
     df.to_csv(out, index=False, compression="gzip")
     print(

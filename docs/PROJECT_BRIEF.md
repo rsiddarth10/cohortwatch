@@ -213,6 +213,8 @@ If a feature does not change **incident, membership or queue rank**, it is out o
 | `agent.proposals.v1` | 6 | 30 d | S8 |
 | `audit.v1` | 6 | 90 d | S7 |
 | `workshop.repairs.v1` | 3 | 7 d | 1b (simulator listens), S6 |
+| `workshop.outcomes.v1` (key = VIN; amended S4/S6) | 6 | 30 d | S6 (fix-confirmation outcomes → campaign close) |
+| `queue.events.v1` (key = depot; amended S4/S6) | 12 | 7 d | S4 (queue changes, via the outbox) |
 | `bench.raw.v1` | 48 | 10 min | 1b (bench mode only; cleared after each run) |
 | `bench.canonical.v1` | 48 | 10 min | S2 (normaliser bench output only) |
 

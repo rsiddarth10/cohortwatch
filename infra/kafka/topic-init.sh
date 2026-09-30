@@ -32,6 +32,8 @@ campaign.events.v1 12 $((30 * DAY_MS)) 0
 agent.proposals.v1 6 $((30 * DAY_MS)) 0
 audit.v1 6 $((90 * DAY_MS)) 0
 workshop.repairs.v1 3 $((7 * DAY_MS)) 0
+workshop.outcomes.v1 6 $((30 * DAY_MS)) 0
+queue.events.v1 12 $((7 * DAY_MS)) 0
 bench.raw.v1 48 $((10 * MIN_MS)) 2
 bench.canonical.v1 48 $((10 * MIN_MS)) 2
 "

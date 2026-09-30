@@ -1,6 +1,6 @@
 # Overnight report 3: Step 10 (submission deliverables)
 
-Run: 2026-10-01 03:58 → 05:05 IST (hard stop 10:00; finished early). Plan: [docs/plans/s10.md](plans/s10.md). No feature work; no
+Run: 2026-10-01 03:58 → 04:58 IST (hard stop 10:00; finished early). Plan: [docs/plans/s10.md](plans/s10.md). No feature work; no
 refactors. S9 closed first ([overnight-report-2.md](overnight-report-2.md)).
 
 ## Done-check
@@ -66,4 +66,4 @@ provider cache (`.terraform/`, 693 MB); two scan run logs I created. **Main proj
 - `data/ml/*.csv.gz` (ML datasets, gitignored). The Docker build cache (~12 GB reclaimable, `docker builder prune`).
 - Scanner images pulled tonight (ZAP, Semgrep, Trivy, Helm, Terraform, k6): `docker image rm …` if disk is needed.
 
-Disk at the end: C: 27 GB free, D: 184 GB free.
+Disk at the end: C: 35 GB free, D: 184 GB free.

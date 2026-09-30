@@ -29,6 +29,9 @@ interface Bucket {
   spdSum: number;
   spdN: number;
   dtc: number;
+  /** Harsh brake + accel events (null = the OEM does not report them) and idle seconds. */
+  harsh: number | null;
+  idle: number;
   /** The van's last peer-adjusted score per metric in this bucket (S5 at-risk sisters, S4 solo at-risk). */
   scores: Partial<Record<Metric, { adjDev: number; z: number; zs: number }>>;
 }
@@ -46,6 +49,8 @@ const newBucket = (start: number): Bucket => ({
   spdSum: 0,
   spdN: 0,
   dtc: 0,
+  harsh: null,
+  idle: 0,
   scores: {},
 });
 
@@ -70,12 +75,14 @@ function row(vin: string, b: Bucket): string {
       const s = b.scores[m];
       return [cell(s?.adjDev ?? null), cell(s?.z ?? null), cell(s?.zs ?? null)];
     }),
+    b.harsh === null ? '\\N' : String(Math.min(b.harsh, 32767)),
+    cell(b.idle),
   ].join('\t');
 }
 
 const COLUMNS =
   'vin, ts, readings, coolant_c, coolant_max_c, batt_temp_c, batt_temp_max_c, lv_batt_v, soc_pct, ambient_c, speed_kmh, dtc_count, ' +
-  'coolant_dev, coolant_z, coolant_zs, batt_dev, batt_z, batt_zs, lv_dev, lv_z, lv_zs';
+  'coolant_dev, coolant_z, coolant_zs, batt_dev, batt_z, batt_zs, lv_dev, lv_z, lv_zs, harsh_count, idle_s';
 
 export class TelemetryWriter {
   private readonly open = new Map<number, Map<string, Bucket>>();
@@ -146,6 +153,9 @@ export class TelemetryWriter {
         b.spdN++;
       }
       b.dtc += e.dtc.length;
+      if (e.harsh_brake !== null || e.harsh_accel !== null)
+        b.harsh = (b.harsh ?? 0) + (e.harsh_brake ?? 0) + (e.harsh_accel ?? 0);
+      if (e.idle_s !== null) b.idle += e.idle_s;
       for (const s of scores[idx] ?? []) b.scores[s.metric] = { adjDev: s.adjDev, z: s.zLevel, zs: s.zSlope };
     }
     this.watermark.set(partition, wm);

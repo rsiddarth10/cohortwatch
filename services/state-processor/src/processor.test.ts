@@ -123,6 +123,22 @@ describe('processBatch', () => {
   });
 });
 
+describe('repair resets the trend (S6)', () => {
+  it('after a repair the van is judged on post-repair readings only', () => {
+    const env0 = { params: DEFAULT_DETECT, registry: registry(), peers: new PeerContext(2, 10) };
+    const ps = new PartitionState();
+    processBatch(ps, stream().slice(0, 150), env0); // the sick van is +8 °C by now
+    const before = ps.vans.get(SICK)!.m.coolant_c!.slow;
+    expect(before.Sy / before.S).toBeGreaterThan(93);
+    const repairs = new Map([[SICK, T0 + 30 * HOUR]]);
+    const healthy = Array.from({ length: 10 }, (_, i) => ev(SICK, 500 + i, 31 + i / 2, 90));
+    processBatch(ps, healthy, { ...env0, repairs });
+    const after = ps.vans.get(SICK)!;
+    expect(after.repairTs).toBe(T0 + 30 * HOUR);
+    expect(after.m.coolant_c!.slow.Sy / after.m.coolant_c!.slow.S).toBeCloseTo(90, 0);
+  });
+});
+
 describe('registry placement and config', () => {
   it('depot at event time follows the assignment ranges', () => {
     const v = registry().get(SICK)!;

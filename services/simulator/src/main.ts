@@ -295,6 +295,11 @@ async function runStream(cfg: SimulatorConfig, world: World, mode: 'demo' | 'liv
       }
       const plant = world.scenario.plants.get(r.vin);
       metrics.repairs.inc({ outcome: plant?.badRepair ? 'bad_repair' : 'applied' });
+      // ground truth (brief §5.4): the designated bad-repair sister keeps drifting; every other repair holds
+      await client.query('UPDATE sim.ground_truth SET repair_outcome = $2 WHERE vin = $1', [
+        r.vin,
+        plant?.badRepair ? 'not_fixed' : 'fixed',
+      ]);
       pendingRepairAt.set(r.vin, iso);
       workers[w]!.send({ type: 'repair', vin: r.vin, repairedAtMs: r.repairedAtMs } satisfies MainMessage);
     },
@@ -335,7 +340,10 @@ async function runStream(cfg: SimulatorConfig, world: World, mode: 'demo' | 'liv
       }
       if (cfg.autoRepairs === 'on' && !autoRepairsDone && now >= world.scenario.autoRepairAtMs) {
         autoRepairsDone = true;
-        const msgs = world.scenario.s1.sisters.map((vin) => repairMessage(vin, now));
+        // the 15 main sisters (incl. the bad repair): the campaign's members at T0+30 h. The late sisters are not
+        // repaired, so they are caught as at-risk and join the campaign later (S4/S6 evaluation).
+        const late = new Set(world.scenario.s1.lateSisters);
+        const msgs = world.scenario.s1.sisters.filter((vin) => !late.has(vin)).map((vin) => repairMessage(vin, now));
         await producer.send(
           msgs.map((m) => ({ topic: REPAIRS_TOPIC, key: m.vin, value: JSON.stringify(m), format: 'repair.v1' })),
         );

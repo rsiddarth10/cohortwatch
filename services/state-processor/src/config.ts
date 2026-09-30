@@ -10,6 +10,8 @@ export const StateConfigSchema = z.object({
   DATABASE_URL: z.string().default('postgres://cw_app:cw_app_dev@localhost:15432/cohortwatch'),
   INPUT_TOPIC: z.string().default('telemetry.canonical.v1'),
   INCIDENT_TOPIC: z.string().default('incidents.v1'),
+  /** Read in full by every replica (tiny topic): a repair resets the van's trend (S6, ADR 0016). */
+  REPAIRS_TOPIC: z.string().default('workshop.repairs.v1'),
   GROUP_ID: z.string().default('cg.state'),
   /** Input encoding: avro (Confluent wire format, schema fetched by id) or json (the normaliser's fallback). */
   ENCODING: z.enum(['avro', 'json']).default('avro'),

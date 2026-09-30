@@ -2,6 +2,7 @@ import {
   emptyVan,
   familyKeyOf,
   peerScopes,
+  resetForRepair,
   stepVan,
   toDetectEvent,
   type CanonicalEvent,
@@ -64,6 +65,8 @@ export interface ProcessorEnv {
   params: DetectParams;
   registry: RegistryCache;
   peers: PeerContext;
+  /** vin → event time of its latest repair (S6): the van's trend restarts there (ADR 0016). */
+  repairs?: ReadonlyMap<string, number>;
 }
 
 function toMessage(
@@ -123,7 +126,13 @@ export function processBatch(part: PartitionState, events: readonly InEvent[], e
     }
     const ev = toDetectEvent(event);
     const place = placementAt(van, ev.ts);
-    const r = stepVan(part.vans.get(ev.vin) ?? emptyVan(), ev, {
+    let before = part.vans.get(ev.vin) ?? emptyVan();
+    const repairTs = env.repairs?.get(ev.vin);
+    if (repairTs !== undefined) {
+      const reset = resetForRepair(before, repairTs);
+      if (reset !== before) part.vans.set(ev.vin, (before = reset));
+    }
+    const r = stepVan(before, ev, {
       params: env.params,
       baseline: van.baseline,
       peers: env.peers,

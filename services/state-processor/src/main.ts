@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { createLogger } from '@cw/common';
@@ -95,7 +96,8 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
   await store.connect();
   const decoder = new CanonicalDecoder(c.SCHEMA_REGISTRY_URL);
   const peers = new PeerContext(c.detect.peerWindowH, c.detect.minPeers);
-  const env = { params: c.detect, registry, peers };
+  const repairs = new Map<string, number>();
+  const env = { params: c.detect, registry, peers, repairs };
 
   const kafka = new KafkaJS.Kafka({
     kafkaJS: { brokers: c.KAFKA_BROKERS.split(','), clientId: 'cw-state-processor', logLevel: KafkaJS.logLevel.WARN },
@@ -192,6 +194,29 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
   } as KafkaJS.ConsumerConstructorConfig);
   const admin = kafka.admin();
   await Promise.all([consumer.connect(), admin.connect()]);
+
+  // Repairs (S6): every replica reads the tiny repairs topic in full (its own throwaway group, never committed)
+  // into vin → repair time; processBatch resets a van's trend before its next reading (ADR 0016).
+  const repairConsumer = kafka.consumer({
+    kafkaJS: { groupId: `cg.state.repairs.${randomUUID()}`, fromBeginning: true, autoCommit: false },
+  });
+  await repairConsumer.connect();
+  await repairConsumer.subscribe({ topics: [c.REPAIRS_TOPIC] });
+  await repairConsumer.run({
+    eachMessage: async ({ message }) => {
+      try {
+        const m = JSON.parse(message.value?.toString() ?? '') as { vin?: unknown; repaired_at?: unknown };
+        const ts = typeof m.repaired_at === 'string' ? Date.parse(m.repaired_at) : NaN;
+        if (typeof m.vin !== 'string' || !Number.isFinite(ts)) return;
+        if ((repairs.get(m.vin) ?? -Infinity) < ts) {
+          repairs.set(m.vin, ts);
+          log.info({ vin: m.vin, repaired_at: m.repaired_at }, 'repair: the van trend restarts');
+        }
+      } catch {
+        // malformed repair message: ignored (the simulator's own consumer logs it)
+      }
+    },
+  });
   await consumer.subscribe({ topics: [topic] });
   const owned = (p: number) => consumer.assignment().some((a) => a.topic === topic && a.partition === p);
 
@@ -351,6 +376,7 @@ export async function startStateProcessor(c: StateConfig, hooks: StateHooks = {}
       await telemetry?.close().catch(() => undefined);
     } else telemetry?.abort();
     await consumer.disconnect().catch(() => undefined);
+    await repairConsumer.disconnect().catch(() => undefined);
     await producer.disconnect().catch(() => undefined);
     await admin.disconnect().catch(() => undefined);
     await store.close().catch(() => undefined);

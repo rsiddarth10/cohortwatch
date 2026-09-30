@@ -23,6 +23,9 @@ function ev(vin: string, min: number, coolant: number | null, x: Partial<Canonic
       ignition: true,
       charging: false,
       dtc: [],
+      harsh_brake: null,
+      harsh_accel: null,
+      idle_s: null,
       quality_flags: [],
       ...x,
     } as unknown as CanonicalEvent,
@@ -76,7 +79,8 @@ describe('TelemetryWriter bucketing', () => {
     expect(queries.some((q) => q.includes('ON CONFLICT DO NOTHING'))).toBe(true);
     expect(queries.at(-1)).toBe('COMMIT');
     const line = String(end.mock.calls[0]![0]).split('\n')[0]!.split('\t');
-    expect(line).toHaveLength(21); // 12 values + 9 score columns
+    expect(line).toHaveLength(23); // 12 values + 9 score columns + harsh + idle
+    expect(line.slice(21)).toEqual(['\\N', '0']); // this OEM reports no harsh counts: unknown, not 0
     expect(line.slice(12, 15)).toEqual(['1.5', '2', '0.5']); // coolant dev, z, zs
     await w.close();
   });

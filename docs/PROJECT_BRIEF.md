@@ -383,7 +383,7 @@ Format v2 is added in **[1b]**: °C and renamed fields, e.g. `engine:{coolant:{t
 - **demo** (compose default):
   - **360×** speed (1 wall-second = 6 sim-minutes), so active vans report about every 5 wall-seconds. Target **~10K msgs/s at N = 100K**.
   - **Amended:** the scenario runs T0 → **T0+72 h** (≈ 12 wall-minutes), then the simulator **keeps running** healthy so fix confirmation has time.
-  - **Repairs:** `npm run sim:repair -- --vin <VIN>` publishes `{vin, repaired_at}` to `workshop.repairs.v1` (the UI publishes the same message in S6/S8). Config `AUTO_REPAIRS=off|on` (default **off**); when on, repairs for the S1 sisters are scheduled at ~T0+30 h for unattended demo runs.
+  - **Repairs:** `npm run sim:repair -- --vin <VIN>` publishes `{vin, repaired_at}` to `workshop.repairs.v1` (the UI publishes the same message in S6/S8). Config `AUTO_REPAIRS=off|on` (default **off**); when on, repairs for the S1 sisters are scheduled at ~T0+30 h for unattended demo runs. **Amended (S4/S6):** only the 15 main sisters (incl. the bad-repair one) are repaired; the 3 late sisters are not, so they are caught as at-risk and join the campaign later. Applied repairs record `repair_outcome` in the ground truth.
   - A "shift start" surge (3× send rate for a few minutes) at T0+24 h.
   - `--reset` restarts from T0.
 - **bench:** every vehicle every wall-second (~100K msgs/s target at N = 100K); realism is ignored.

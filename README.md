@@ -170,7 +170,7 @@ services remember sequence numbers, so replaying from T0 into an existing stack 
 | `SIM_MODE` / `SIM_SPEED` | demo / 360 | `live` = 1× wall time |
 | `PLANTS` | on | planted scenarios |
 | `MESS` | on | mess injection on the raw topics |
-| `AUTO_REPAIRS` | off | `on` repairs the S1 sisters at ~T0+30 h for unattended demos |
+| `AUTO_REPAIRS` | off | `on` repairs the 15 main S1 sisters (not the 3 late ones) at ~T0+30 h for unattended demos; the bad-repair sister keeps drifting |
 | `DEPOT_TRANSFER` | off | `on` moves 2 S1 sisters to another depot at T0+30 h |
 | `GLOBAL_COOLANT_THRESHOLD_C` / `GLOBAL_BATT_TEMP_THRESHOLD_C` | 97 / 47 | simple global thresholds: checks #10/#11, and the shadow rule the state processor runs for the evaluation baseline |
 | `STATE_REPLICAS` | 3 | state-processor replicas (up to 48) |

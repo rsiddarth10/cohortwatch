@@ -53,6 +53,11 @@ interface Results {
   reconcile: Reconcile;
 }
 
+async function fleetSize(client: pg.Client): Promise<number> {
+  const [r] = await rowsOf<{ n: number }>(client, 'SELECT count(*)::int AS n FROM core.vehicle');
+  return r!.n;
+}
+
 async function ledgerUrls(): Promise<string[]> {
   const found: string[] = [];
   for (const port of [9465, 9466, 9467, 9468]) {
@@ -98,7 +103,9 @@ async function collect(): Promise<Results> {
   await client.connect();
   try {
     const t0 = new Date(cfg.t0).getTime();
-    const e = { client, t0, scale: cfg.scale };
+    // N from the database (the running stack's SIM_SCALE), not from the config file
+    const scale = await fleetSize(client);
+    const e = { client, t0, scale };
     const incidents = await evalIncidents(e);
     const campaigns = await evalCampaigns(e);
     const workshop = await evalWorkshop(e, Number(process.env.EVAL_AT_H ?? 29));
@@ -119,7 +126,7 @@ async function collect(): Promise<Results> {
     const seconds = Number(process.env.EVAL_RECONCILE_S ?? 60);
     const rec = process.env.EVAL_RECONCILE === 'off' ? { ran: false, balanced: null, text: 'skipped (EVAL_RECONCILE=off)' } : await reconcile(seconds); // prettier-ignore
     return {
-      scale: cfg.scale,
+      scale,
       seed: String(process.env.SIM_SEED ?? cfg.seed),
       generatedAt: new Date().toISOString(),
       horizonH: await horizonH(client, t0),
@@ -398,7 +405,10 @@ async function main(): Promise<void> {
   mkdirSync(EVAL_DIR, { recursive: true });
   if (process.argv.includes('--reconcile-only')) {
     // the scorecards were taken with the clock paused; the ingestion window needs live traffic
-    const scale = loadSimulatorConfigFile(configPath()).scale;
+    const cfg = loadSimulatorConfigFile(configPath());
+    const client = new pg.Client({ connectionString: cfg.databaseUrl });
+    await client.connect();
+    const scale = await fleetSize(client).finally(() => client.end());
     const file = resolve(EVAL_DIR, `results-${scale}.json`);
     const r = JSON.parse(readFileSync(file, 'utf8')) as Results;
     r.reconcile = await reconcile(Number(process.env.EVAL_RECONCILE_S ?? 60));

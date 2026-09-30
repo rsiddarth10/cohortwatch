@@ -13,20 +13,21 @@ k of n hours), run in shadow on the same readings. *Loudest-first*: rank vans by
 
 **Runs**
 - **N = 5,000**: seed `cohortwatch-42`, produced horizon T0+89.0 h, 82 incidents, 2 campaigns opened; generated 2026-09-30T19:00:34.398Z
+- **N = 30,000**: seed `cohortwatch-42`, produced horizon T0+88.0 h, 126 incidents, 2 campaigns opened; generated 2026-09-30T19:24:34.351Z
 
-| Claim | Data | Metric | Ours (N = 5,000) | Baseline (N = 5,000) |
-|---|---|---|---|---|
-| ✅ **Own normal beats one global threshold** | Naturally-hot vans + heatwave region (+ healthy background) | False incidents (vans flagged / vans) | naturally hot **0/38** (0.0%); heatwave **25/704** (3.6%); background **4.3** per 1,000 | global threshold: naturally hot 29/38 (76.3%); heatwave 593/704 (84.2%); background 175.3 per 1,000 |
-| ✅ **Peer adjustment cancels shared conditions** | Heatwave region (every van in the region runs hot) | Campaigns / incidents in the region | campaigns **0**; incidents 25/704 vans (3.6%); heatwave vans ever in today's bays 4 | global threshold (no peers): 593/704 vans (84.2%) |
-| ✅ **Grouping finds real outbreaks, rejects look-alikes** | S1 (18 sisters), S1b (8), scattered + same-depot decoys (8) | Membership precision/recall; S1 and S1b separate; decoys admitted | S1: 1 campaign, recall **18/18**, precision **100%**; S1b: 1 campaign, 8/8, **separate**; decoys admitted **0**; background campaigns 0 | no grouping: every decoy with a fault is just another alarm (global rule flags 7/8 decoys; our per-van detector 8/8, which S5 then keeps out) |
-| ✅ **Joins are exact** | Duplicates, redeliveries, offline bursts (the mess plan) + restarts | Members = unique sisters | **80** member rows = **80** unique (vin, family); outbox 1353 rows, 0 unpublished | n/a (a naive at-least-once consumer would count each redelivery) |
-| ✅ **Prediction (at-risk)** | 3 late sisters (fault starts after S1 opens) | % flagged at-risk before crossing; lead time (h) | **3/3** at-risk before their own incident, lead **4.6, 17.3, 19.4 h**; in the queue 3/3 before it; healthy S1 cohort flagged 1/42 | global threshold predicts nothing: it fires after onset (onset→hit p50 11.1 h, 3/3 hit) |
-| ✅ **Queue beats "loudest-first"** | Loud-but-stable vans (many codes, flat trend) vs sisters + runaway | Precision@k vs the true at-risk set | precision@7 at D-001 **100%**; precision@50 fleet-wide **34%**; loud-but-stable above an S1 sister 0 times, in today's bays 0 | loudest-first (most codes in 24 h): precision@7 57%; precision@50 4% |
-| ⚠️ **Runaway early warning** | The runaway van | Hours of warning before `limit_ts` | first incident **9.0 h** before its limit; "critical, ≈ N h to limit" **5.8 h** before; rank 1 in its depot; critical → top of queue 0.01 s | global threshold first hit 9.2 h before the limit (a plain alarm: no "hours to limit", no rank, and the same rule flags 175.3 of every 1,000 healthy vans) |
-| ✅ **Detection before failure** | S1 `limit_ts` (first sister to reach its limit) | Hours from campaign open to the first `limit_ts` | campaign opened **24.5 h** before the first limit (first S1 incident 25.0 h before) | global threshold's first hit on an S1 sister 41.6 h before: one van among 175.3 alarms per 1,000 healthy vans, never grouped into an outbreak |
-| ✅ **Fix confirmation** | 15 repairs incl. 1 bad repair (`AUTO_REPAIRS=on`) | Correct fixed / not-fixed labels | **15/15** correct (FIXED 14, NOT_FIXED 1; wrong 0; pending 0); bad repair back in the queue at rank 1; S1 OPEN (14/18 fixed) | "repaired = fixed": 14/15 correct, the bad repair is closed as fixed and the campaign would close |
-| ✅ **Robust ingestion** | Mess (duplicates, late, out-of-order, bad values, format switch) + bursts | Count in = count out (valid + DLQ + dropped duplicates) | 60 s window: in **11,764** = out 11,519 + DLQ 8 + duplicates 237 → **BALANCED** | n/a |
-| ✅ **Throughput** | Bench mode (`npm run simulator:bench`) | Measured msgs/s, with hardware stated | about **100K msgs/s** sustained into Redpanda (docs/perf/simulator-bench.md; laptop CPU, 8 producer processes, Docker Desktop/WSL2) | target: the 1× rate at N = 100K; the demo needs ~22K msgs/s |
+| Claim | Data | Metric | Ours (N = 5,000) | Baseline (N = 5,000) | Ours (N = 30,000) | Baseline (N = 30,000) |
+|---|---|---|---|---|---|---|
+| ✅ ✅ **Own normal beats one global threshold** | Naturally-hot vans + heatwave region (+ healthy background) | False incidents (vans flagged / vans) | naturally hot **0/38** (0.0%); heatwave **25/704** (3.6%); background **4.3** per 1,000 | global threshold: naturally hot 29/38 (76.3%); heatwave 593/704 (84.2%); background 175.3 per 1,000 | naturally hot **9/193** (4.7%); heatwave **11/3675** (0.3%); background **2.7** per 1,000 | global threshold: naturally hot 148/193 (76.7%); heatwave 3035/3675 (82.6%); background 133.6 per 1,000 |
+| ✅ ✅ **Peer adjustment cancels shared conditions** | Heatwave region (every van in the region runs hot) | Campaigns / incidents in the region | campaigns **0**; incidents 25/704 vans (3.6%); heatwave vans ever in today's bays 4 | global threshold (no peers): 593/704 vans (84.2%) | campaigns **0**; incidents 11/3675 vans (0.3%); heatwave vans ever in today's bays 2 | global threshold (no peers): 3035/3675 vans (82.6%) |
+| ✅ ✅ **Grouping finds real outbreaks, rejects look-alikes** | S1 (18 sisters), S1b (8), scattered + same-depot decoys (8) | Membership precision/recall; S1 and S1b separate; decoys admitted | S1: 1 campaign, recall **18/18**, precision **100%**; S1b: 1 campaign, 8/8, **separate**; decoys admitted **0**; background campaigns 0 | no grouping: every decoy with a fault is just another alarm (global rule flags 7/8 decoys; our per-van detector 8/8, which S5 then keeps out) | S1: 1 campaign, recall **18/18**, precision **100%**; S1b: 1 campaign, 8/8, **separate**; decoys admitted **0**; background campaigns 0 | no grouping: every decoy with a fault is just another alarm (global rule flags 8/8 decoys; our per-van detector 8/8, which S5 then keeps out) |
+| ✅ ✅ **Joins are exact** | Duplicates, redeliveries, offline bursts (the mess plan) + restarts | Members = unique sisters | **80** member rows = **80** unique (vin, family); outbox 1353 rows, 0 unpublished | n/a (a naive at-least-once consumer would count each redelivery) | **126** member rows = **126** unique (vin, family); outbox 4510 rows, 0 unpublished | n/a (a naive at-least-once consumer would count each redelivery) |
+| ✅ ✅ **Prediction (at-risk)** | 3 late sisters (fault starts after S1 opens) | % flagged at-risk before crossing; lead time (h) | **3/3** at-risk before their own incident, lead **4.6, 17.3, 19.4 h**; in the queue 3/3 before it; healthy S1 cohort flagged 1/42 | global threshold predicts nothing: it fires after onset (onset→hit p50 11.1 h, 3/3 hit) | **3/3** at-risk before their own incident, lead **19.4, 16.6, 18.7 h**; in the queue 3/3 before it; healthy S1 cohort flagged 0/42 | global threshold predicts nothing: it fires after onset (onset→hit p50 29.9 h, 3/3 hit) |
+| ✅ ✅ **Queue beats "loudest-first"** | Loud-but-stable vans (many codes, flat trend) vs sisters + runaway | Precision@k vs the true at-risk set | precision@7 at D-001 **100%**; precision@50 fleet-wide **34%**; loud-but-stable above an S1 sister 0 times, in today's bays 0 | loudest-first (most codes in 24 h): precision@7 57%; precision@50 4% | precision@6 at D-001 **100%**; precision@50 fleet-wide **36%**; loud-but-stable above an S1 sister 0 times, in today's bays 0 | loudest-first (most codes in 24 h): precision@6 17%; precision@50 4% |
+| ⚠️ ✅ **Runaway early warning** | The runaway van | Hours of warning before `limit_ts` | first incident **9.0 h** before its limit; "critical, ≈ N h to limit" **5.8 h** before; rank 1 in its depot; critical → top of queue 0.01 s | global threshold first hit 9.2 h before the limit (a plain alarm: no "hours to limit", no rank, and the same rule flags 175.3 of every 1,000 healthy vans) | first incident **11.7 h** before its limit; "critical, ≈ N h to limit" **5.7 h** before; rank 1 in its depot; critical → top of queue 0.05 s | global threshold first hit 6.5 h before the limit (a plain alarm: no "hours to limit", no rank, and the same rule flags 133.6 of every 1,000 healthy vans) |
+| ✅ ✅ **Detection before failure** | S1 `limit_ts` (first sister to reach its limit) | Hours from campaign open to the first `limit_ts` | campaign opened **24.5 h** before the first limit (first S1 incident 25.0 h before) | global threshold's first hit on an S1 sister 41.6 h before: one van among 175.3 alarms per 1,000 healthy vans, never grouped into an outbreak | campaign opened **29.2 h** before the first limit (first S1 incident 29.6 h before) | global threshold's first hit on an S1 sister 29.8 h before: one van among 133.6 alarms per 1,000 healthy vans, never grouped into an outbreak |
+| ✅ ✅ **Fix confirmation** | 15 repairs incl. 1 bad repair (`AUTO_REPAIRS=on`) | Correct fixed / not-fixed labels | **15/15** correct (FIXED 14, NOT_FIXED 1; wrong 0; pending 0); bad repair back in the queue at rank 1; S1 OPEN (14/18 fixed) | "repaired = fixed": 14/15 correct, the bad repair is closed as fixed and the campaign would close | **15/15** correct (FIXED 14, NOT_FIXED 1; wrong 0; pending 0); bad repair back in the queue at rank 3; S1 OPEN (14/18 fixed) | "repaired = fixed": 14/15 correct, the bad repair is closed as fixed and the campaign would close |
+| ✅ ✅ **Robust ingestion** | Mess (duplicates, late, out-of-order, bad values, format switch) + bursts | Count in = count out (valid + DLQ + dropped duplicates) | 60 s window: in **11,764** = out 11,519 + DLQ 8 + duplicates 237 → **BALANCED** | n/a | 60 s window: in **78,811** = out 77,052 + DLQ 119 + duplicates 1,640 → **BALANCED** | n/a |
+| ✅ ✅ **Throughput** | Bench mode (`npm run simulator:bench`) | Measured msgs/s, with hardware stated | about **100K msgs/s** sustained into Redpanda (docs/perf/simulator-bench.md; laptop CPU, 8 producer processes, Docker Desktop/WSL2) | target: the 1× rate at N = 100K; the demo needs ~22K msgs/s | about **100K msgs/s** sustained into Redpanda (docs/perf/simulator-bench.md; laptop CPU, 8 producer processes, Docker Desktop/WSL2) | target: the 1× rate at N = 100K; the demo needs ~22K msgs/s |
 
 **How to reproduce:** `docker compose down -v && SIM_SCALE=<N> AUTO_REPAIRS=on docker compose up -d`, wait for a
 produced horizon ≥ T0+84 h (about 15 wall-minutes at 360×), then `npm run eval:all` (the stack must be up for the
@@ -94,5 +95,68 @@ raw in (committed)    11764
 canonical out         11519   (distinct source offsets found in telemetry.canonical.v1)
 DLQ                   8   (distinct source offsets found in telemetry.dlq.v1)
 duplicates dropped    237   (normaliser ledger)
+difference            0   BALANCED
+```
+
+### N = 30,000
+
+**Incidents by ground-truth role** (S3 scorecard)
+
+| role | vans | expected | ours | global | ours onset→incident h (p50/max) | global onset→hit h (p50/max) |
+|---|---|---|---|---|---|---|
+| background | 26,032 | rate / 1,000 | 71 (0.3%) | 3479 (13.4%) | – | – |
+| bad_repair | 1 | flagged | 1 (100.0%) | 1 (100.0%) | 22.3 / 22.3 | 26.5 / 26.5 |
+| decoy_same_depot_other_model | 2 | flagged (S5 excludes) | 2 (100.0%) | 2 (100.0%) | 20.6 / 27.6 | 20.4 / 31.6 |
+| decoy_scattered | 6 | flagged (S5 excludes) | 6 (100.0%) | 6 (100.0%) | 18.2 / 27.7 | 38.5 / 57.5 |
+| heatwave_region | 3,675 | ~0 | 11 (0.3%) | 3035 (82.6%) | – | 17.0 / 46.8 |
+| loud_stable | 20 | report | 0 (0.0%) | 1 (5.0%) | – | – |
+| naturally_hot | 193 | ~0 | 9 (4.7%) | 148 (76.7%) | – | – |
+| runaway | 1 | critical | 1 (100.0%) | 1 (100.0%) | 11.5 / 11.5 | 16.7 / 16.7 |
+| s1_healthy_cohort | 42 | ~0 | 0 (0.0%) | 1 (2.4%) | – | – |
+| s1_late_sister | 3 | flagged | 3 (100.0%) | 3 (100.0%) | 28.5 / 28.9 | 29.9 / 31.0 |
+| s1_sister | 14 | flagged | 14 (100.0%) | 9 (64.3%) | 21.9 / 22.4 | 21.4 / 23.3 |
+| s1b_sister | 8 | flagged | 8 (100.0%) | 8 (100.0%) | 13.2 / 14.2 | 34.7 / 35.8 |
+| sensor_glitch | 3 | 0 | 0 (0.0%) | 0 (0.0%) | – | – |
+
+**Campaigns** (S5 scorecard)
+
+| Check | Expected | Result |
+|---|---|---|
+| S1 | exactly 1 campaign; members ⊆ sisters | 1 campaign(s); 18/18 sisters; 0 non-sisters |
+| S1b | exactly 1, separate from S1 | 1 campaign(s); 8/8 sisters; separate; 0 non-sisters |
+| Late sisters | at-risk before own incident; lead (h) | 3/3 (100%); lead 19.4, 16.6, 18.7 h |
+| At-risk false positives | healthy S1 cohort flagged | 0/42 |
+| Decoys | admitted to any campaign = 0 | 0 |
+| Heatwave region | campaigns = 0 | 0 |
+| Background | campaigns = 0 | 0 |
+| Firmware clue | S1 clue printed; matches the plant | "13 of 18 got firmware 4.2.1 in the 3 days before onset, vs 48% of healthy sisters (20 of 42)" · plant: 16/18 sisters, 20/42 healthy (48%) |
+| Early warning | S1 OPEN → first sister limit_ts | 29.2 h (opened T0+28.1 h, limit T0+57.3 h) |
+| Counting | members = unique VINs after restarts | 126 member rows = 126 unique (vin, family); outbox 4510 rows, 0 unpublished |
+
+**Workshop queue and fix confirmation** (S4 + S6 scorecard, queue at T0+29 h)
+
+| Check | Expected | Result |
+|---|---|---|
+| Queue vs loudest-first | precision@6 at D-001 (today's bays) | ours 100% vs loudest-first 17% |
+|  | precision@50 fleet-wide | ours 36% vs loudest-first 4% |
+| Loud-but-stable | none above any S1 sister | snapshot: 0 of 0 queued loud vans above the lowest S1 sister (0.48); whole run: 10 loud vans ever queued, 0 ever in today's bays, 0 times above an S1 sister at the same depot |
+| Runaway | rank 1 in its depot; critical → top (s) | rank 1 after its card (T0+27.5 h); critical incident written → top of queue 0.05 s; limit T0+33.2 h |
+| Late sisters | in the queue (at-risk) before their own incident | 3/3; lead 17.5, 15.6, 16.8 h |
+| Fix confirmation | repaired sisters FIXED; bad repair NOT_FIXED | 15 repairs · truth fixed: FIXED 14, NOT_FIXED 0, PENDING 0 · truth not_fixed: FIXED 0, NOT_FIXED 1, PENDING 0 |
+|  | bad repair back in the queue | rank 3 (TODAY): "repair on 2026-09-29 did not hold" |
+| Campaign close | S1 stays OPEN (bad repair, late sisters) | OPEN: 14 of 18 fixed |
+| Heatwave / naturally hot | not in today's bays | heatwave 2 vans, naturally hot 2 vans (ever, any snapshot) |
+| Cards | runaways and new/growing campaigns only | CAMPAIGN_GREW 16, CAMPAIGN_OPENED 2, RUNAWAY 3 |
+
+**Ingestion reconcile** (S2): 
+
+```
+window start: 48 partitions; waiting 60 s ...
+normaliser reconcile  window 60s  2026-09-30T19:25:00.187Z → 2026-09-30T19:26:00.257Z
+partitions            48
+raw in (committed)    78811
+canonical out         77052   (distinct source offsets found in telemetry.canonical.v1)
+DLQ                   119   (distinct source offsets found in telemetry.dlq.v1)
+duplicates dropped    1640   (normaliser ledger)
 difference            0   BALANCED
 ```

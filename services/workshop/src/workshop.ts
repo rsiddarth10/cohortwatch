@@ -304,6 +304,7 @@ export class Workshop {
   /** Every input of the given depots' queues, in one batch of queries, grouped by the van's depot. */
   private async loadInputs(c: Q, depotIds: number[], asOf: number): Promise<Map<number, DepotInputs>> {
     const vins = depotIds.flatMap((d) => this.registry.depotVins(d));
+    const fleet = depotIds.length > 1; // the hourly tick: every depot at once
     const since = new Date(asOf - 24 * HOUR);
     const at = new Date(asOf);
     const [repairs, incidents, members, atRisk, rows, agg, bookings] = [
@@ -327,17 +328,20 @@ export class Workshop {
          JOIN core.campaign g ON g.id = a.campaign_id WHERE a.active AND g.status = 'OPEN' AND a.vin = ANY($1)`,
         [vins],
       ),
+      // telemetry: one depot → probe its VINs on the (vin, ts) key; the whole fleet → scan the time range once
+      // (docs/perf/queries.md: 30K VINs through the key cost 632K buffer hits and 6.1 s; the range scan 7.6K and 1.3 s).
+      // Newest first by ts only: rows are grouped per VIN in memory, so no sort on the VIN is needed.
       await c.query<TelemetryRow>(
         `SELECT vin::text AS vin, ts, coolant_dev, coolant_z, coolant_zs, batt_dev, batt_z, batt_zs, lv_dev, lv_z, lv_zs
-         FROM core.telemetry WHERE vin = ANY($1) AND ts > $2 AND ts <= $3 ORDER BY vin, ts DESC`,
-        [vins, new Date(asOf - 6 * HOUR), at],
+         FROM core.telemetry WHERE ${fleet ? 'TRUE' : 'vin = ANY($3)'} AND ts > $1 AND ts <= $2 ORDER BY ts DESC`,
+        fleet ? [new Date(asOf - 6 * HOUR), at] : [new Date(asOf - 6 * HOUR), at, vins],
       ),
       await c.query<AggRow>(
         `SELECT vin::text AS vin, sum(dtc_count)::int AS codes,
                 sum(harsh_count) FILTER (WHERE speed_kmh > 0)::float8 AS harsh,
                 count(*) FILTER (WHERE speed_kmh > 0 AND harsh_count IS NOT NULL)::int AS driven
-         FROM core.telemetry WHERE vin = ANY($1) AND ts > $2 AND ts <= $3 GROUP BY vin`,
-        [vins, since, at],
+         FROM core.telemetry WHERE ${fleet ? 'TRUE' : 'vin = ANY($3)'} AND ts > $1 AND ts <= $2 GROUP BY vin`,
+        fleet ? [since, at] : [since, at, vins],
       ),
       await c.query<BookingRow>(
         'SELECT depot_id, vin::text AS vin, slot, booked_by FROM core.queue_booking WHERE depot_id = ANY($1)',

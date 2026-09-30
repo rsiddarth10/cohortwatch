@@ -26,6 +26,8 @@ export const IncidentMessageSchema = z.object({
   region_id: z.number().int(),
   firmware: z.string().nullable(),
   baseline_source: z.enum(['VAN', 'COHORT']).nullable(),
+  /** The van's newest fault code of this family (S5 "top codes" clue); absent in messages from before S5. */
+  last_code: z.string().nullable().optional(),
   numbers: z.object({
     level: z.number().nullable(),
     baseline_median: z.number().nullable(),

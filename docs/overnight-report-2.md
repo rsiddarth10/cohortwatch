@@ -1,6 +1,6 @@
 # Overnight report 2: Step 9 (evaluation, ML, load, tuning, observability)
 
-Run: 2026-09-30 20:14 → 2026-10-01 (hard stop 07:30 IST). Plan: [docs/plans/s9.md](plans/s9.md).
+Run: 2026-09-30 20:14 → 2026-10-01 ~04:00 IST (hard stop 07:30, capped at 05:00). Plan: [docs/plans/s9.md](plans/s9.md).
 
 ## Done-check
 
@@ -12,7 +12,7 @@ Run: 2026-09-30 20:14 → 2026-10-01 (hard stop 07:30 IST). Plan: [docs/plans/s9
 | 3 | Queue re-rank scaling | **done** | Hourly tick at 30K, same point of two runs (sim T0+87 h): mean **8.95 → 2.31 s**, p95 **27.5 → 5.7 s**. 100% of ticks now within one sim-hour (10 s at 360×), before 70%. [workshop.md](perf/workshop.md#s9-tick-scaling), ADR 0022 |
 | 4 | k6 load + soak | **done** | 30K run, pipeline live. Load (ramp to 50 users): 31,201 requests, 173 req/s, **0 errors**, p95 383 ms, p99 511 ms. Soak (20 users, 10 min) + 50 SSE clients: 94,363 requests, 157 req/s, **0 errors**, p95 240 ms, p99 341 ms. SSE: 50/50 connected, 0 dropped, 75,100 events. [load.md](perf/load.md) |
 | 5 | Query tuning | **done** | [docs/perf/queries.md](perf/queries.md): top 5 from `pg_stat_statements` at 30K. Workshop 24 h aggregate fleet-wide 6,145 → 1,279 ms (632K → 7.6K buffers). 6 h scores 2,743 → 210 ms (sort removed). Both applied. The continuous-aggregate refresh is analysed, and bounding its window is a recommendation, not a change |
-| 6 | Chaos | CHAOS_STATUS | CHAOS_NUMBERS |
+| 6 | Chaos | **done** | 30K, live. Recovery to ≥ 80% throughput: Redis restart **10 s**, normaliser SIGKILL **15 s**, state-processor SIGKILL **50 s**. Reconcile after the faults BALANCED (106,650 = 104,123 + 161 + 2,366). No duplicate effects: incidents 169 = 169, members 168 = 168, repairs 15 = 15, outbox drained. [chaos.md](perf/chaos.md). Limit: a whole-window reconcile cannot span a replica kill (its ledger dies with it) |
 | 7 | Observability | **done** | Prometheus (every replica via DNS discovery, 11 targets up) + Grafana under profile `observability`, 8-panel provisioned dashboard, [screenshot](screenshots/5-grafana.png) |
 | 8 | Pact | **done** | Consumer contract web → API (queue + campaign) in the CI unit job. The provider is verified against the real API + TimescaleDB in the integration job. The pact file is committed |
 
@@ -65,6 +65,11 @@ Run: 2026-09-30 20:14 → 2026-10-01 (hard stop 07:30 IST). Plan: [docs/plans/s9
     With the default limit, a smoke run got 80% 429s, which is the limiter working.
 18. **Docker Desktop stopped a third time** (about 01:30), losing the first seed-7 training run. It was re-run. Long
     background chains now restart Docker if the engine disappears.
+
+19. **A stale background chain.** One background script I had "stopped" at 02:40 kept running, in parallel with its
+    replacement. The ML results are unaffected (same seeds and code give the same output). It did cause a double Redis
+    restart in chaos run 1 and a missing Prometheus. Chaos was re-run cleanly (run 2), and that run is the one reported.
+20. **Time cap.** S9 closed at about 04:00 IST, inside your 05:00 cap. The ML *wiring* is the only part left partial.
 
 ## Not deleted (for you to decide)
 

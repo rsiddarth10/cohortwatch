@@ -555,6 +555,21 @@ services:
       retries: 12
     restart: unless-stopped
 
+  # S9 offline ML job (profile "ml", never started by default): the at-risk classifier's export / training.
+  # An EVALUATION job: it reads labels from sim.ground_truth as cw_sim; its output never feeds detection.
+  #   docker compose --profile ml run --rm ml-at-risk export.py /data/test-seed42.csv.gz
+  ml-at-risk:
+    profiles: ['ml']
+    build:
+      context: ml/at_risk
+    image: cohortwatch/ml-at-risk:dev
+    environment:
+      DATABASE_URL: postgres://cw_sim:${CW_SIM_PASSWORD:-cw_sim_dev}@postgres:5432/cohortwatch
+      T0: ${SIM_T0:-2026-09-28T04:00:00Z}
+      HORIZON_H: ${ML_HORIZON_H:-84}
+    volumes:
+      - ./data/ml:/data
+
 volumes:
   redpanda-data:
   postgres-data:

@@ -1,18 +1,18 @@
 {
   "scale": 5000,
   "seed": "cohortwatch-42",
-  "generatedAt": "2026-09-30T17:34:46.882Z",
-  "horizonH": 997,
+  "generatedAt": "2026-09-30T19:00:34.398Z",
+  "horizonH": 89,
   "incidents": {
     "rows": [
       {
         "role": "background",
         "vans": 4158,
-        "ours": 72,
-        "ours_signal": 72,
+        "ours": 18,
+        "ours_signal": 18,
         "ours_dtc": 0,
         "ours_family": 0,
-        "global": 829,
+        "global": 729,
         "lag_p50": null,
         "lag_max": null,
         "glag_p50": null,
@@ -60,11 +60,11 @@
         "ours_signal": 6,
         "ours_dtc": 0,
         "ours_family": 6,
-        "global": 6,
+        "global": 5,
         "lag_p50": 16.11579125,
         "lag_max": 22.21636722222222,
-        "glag_p50": 31.685589444444446,
-        "glag_max": 113.50672944444445,
+        "glag_p50": 28.350369722222222,
+        "glag_max": 36.110682777777775,
         "critical": 0,
         "warn_min": null,
         "warn_max": null
@@ -72,9 +72,9 @@
       {
         "role": "heatwave_region",
         "vans": 704,
-        "ours": 27,
-        "ours_signal": 26,
-        "ours_dtc": 1,
+        "ours": 25,
+        "ours_signal": 25,
+        "ours_dtc": 0,
         "ours_family": 0,
         "global": 593,
         "lag_p50": null,
@@ -88,9 +88,9 @@
       {
         "role": "loud_stable",
         "vans": 20,
-        "ours": 3,
+        "ours": 2,
         "ours_signal": 0,
-        "ours_dtc": 3,
+        "ours_dtc": 2,
         "ours_family": 0,
         "global": 4,
         "lag_p50": null,
@@ -104,11 +104,11 @@
       {
         "role": "naturally_hot",
         "vans": 38,
-        "ours": 1,
-        "ours_signal": 1,
+        "ours": 0,
+        "ours_signal": 0,
         "ours_dtc": 0,
         "ours_family": 0,
-        "global": 30,
+        "global": 29,
         "lag_p50": null,
         "lag_max": null,
         "glag_p50": null,
@@ -172,11 +172,11 @@
         "ours_signal": 14,
         "ours_dtc": 0,
         "ours_family": 14,
-        "global": 13,
+        "global": 12,
         "lag_p50": 21.946974583333333,
         "lag_max": 22.615140555555556,
-        "glag_p50": 21.615140555555556,
-        "glag_max": 25.8386225,
+        "glag_p50": 21.6133875,
+        "glag_max": 22.98851972222222,
         "critical": 0,
         "warn_min": null,
         "warn_max": null
@@ -214,15 +214,15 @@
         "warn_max": null
       }
     ],
-    "total": 154,
-    "signal": 144,
-    "dtc": 10
+    "total": 82,
+    "signal": 79,
+    "dtc": 3
   },
   "campaigns": {
     "facts": {
-      "horizonH": 931,
+      "horizonH": 89,
       "opened": 2,
-      "watching": 83,
+      "watching": 33,
       "merged": 0,
       "s1Campaigns": 1,
       "s1Recall": 18,
@@ -235,18 +235,18 @@
       "lateTotal": 3,
       "lateLeadsH": [
         4.566845,
-        18.251308333333334,
+        17.251308333333334,
         19.44517777777778
       ],
-      "healthyCohortFlagged": 5,
+      "healthyCohortFlagged": 1,
       "decoysAdmitted": 0,
       "heatwaveCampaigns": 0,
       "backgroundCampaigns": 0,
       "firmwareClue": "14 of 18 got firmware 4.2.1 in the 3 days before onset, vs 38% of healthy sisters (16 of 42)",
       "earlyWarningH": 24.50109611111111,
-      "memberRows": 140,
-      "uniqueMembers": 140,
-      "outboxRows": 9369,
+      "memberRows": 80,
+      "uniqueMembers": 80,
+      "outboxRows": 1353,
       "outboxUnpublished": 0
     },
     "checks": [
@@ -263,12 +263,12 @@
       [
         "Late sisters",
         "at-risk before own incident; lead (h)",
-        "3/3 (100%); lead 4.6, 18.3, 19.4 h"
+        "3/3 (100%); lead 4.6, 17.3, 19.4 h"
       ],
       [
         "At-risk false positives",
         "healthy S1 cohort flagged",
-        "5/42"
+        "1/42"
       ],
       [
         "Decoys",
@@ -298,13 +298,13 @@
       [
         "Counting",
         "members = unique VINs after restarts",
-        "140 member rows = 140 unique (vin, family); outbox 9369 rows, 0 unpublished"
+        "80 member rows = 80 unique (vin, family); outbox 1353 rows, 0 unpublished"
       ]
     ]
   },
   "workshop": {
     "facts": {
-      "horizonH": 932,
+      "horizonH": 89,
       "atH": 29,
       "depotCode": "D-001",
       "k": 7,
@@ -312,18 +312,18 @@
       "loudestAtK": 0.5714285714285714,
       "precisionAt50": 0.34,
       "loudestAt50": 0.04,
-      "loudQueuedEver": 10,
+      "loudQueuedEver": 9,
       "loudTodayEver": 0,
       "loudAboveSisterEver": 0,
       "runawayRank": 1,
-      "runawayTopS": 0.009694,
+      "runawayTopS": 0.013429,
       "runawayCardH": 28.183333333333334,
       "runawayLimitH": 34.016666666666666,
       "lateInQueue": 3,
       "lateTotal": 3,
       "lateLeadsH": [
         31.566845,
-        17.251308333333334,
+        16.251308333333334,
         43.44517777777778
       ],
       "repairs": 15,
@@ -342,8 +342,8 @@
       "s1Status": "OPEN",
       "s1Fixed": 14,
       "s1Members": 18,
-      "heatwaveToday": 5,
-      "hotToday": 1,
+      "heatwaveToday": 4,
+      "hotToday": 0,
       "cards": {
         "CAMPAIGN_GREW": 16,
         "CAMPAIGN_OPENED": 2,
@@ -364,7 +364,7 @@
       [
         "Loud-but-stable",
         "none above any S1 sister",
-        "snapshot: 0 of 0 queued loud vans above the lowest S1 sister (0.49); whole run: 10 loud vans ever queued, 0 ever in today's bays, 0 times above an S1 sister at the same depot"
+        "snapshot: 0 of 0 queued loud vans above the lowest S1 sister (0.51); whole run: 9 loud vans ever queued, 0 ever in today's bays, 0 times above an S1 sister at the same depot"
       ],
       [
         "Runaway",
@@ -374,7 +374,7 @@
       [
         "Late sisters",
         "in the queue (at-risk) before their own incident",
-        "3/3; lead 31.6, 17.3, 43.4 h"
+        "3/3; lead 31.6, 16.3, 43.4 h"
       ],
       [
         "Fix confirmation",
@@ -394,7 +394,7 @@
       [
         "Heatwave / naturally hot",
         "not in today's bays",
-        "heatwave 5 vans, naturally hot 1 vans (ever, any snapshot)"
+        "heatwave 4 vans, naturally hot 0 vans (ever, any snapshot)"
       ],
       [
         "Cards",
@@ -404,19 +404,20 @@
     ]
   },
   "baseline": {
-    "runawayGlobalWarnH": "9.1666666666666667",
-    "runawayOursWarnH": "5.8333333333333333",
-    "s1GlobalFirstHitToLimitH": "41.5819447222222222",
-    "s1FirstIncidentToLimitH": "25.0130077777777778"
+    "runawayGlobalWarnH": 9.166666666666666,
+    "runawayOursWarnH": 5.833333333333333,
+    "runawayFirstIncidentWarnH": 9,
+    "s1GlobalFirstHitToLimitH": 41.581944722222225,
+    "s1FirstIncidentToLimitH": 25.013007777777776
   },
   "reconcile": {
     "ran": true,
     "balanced": true,
-    "text": "window start: 48 partitions; waiting 60 s ...\nnormaliser reconcile  window 60s  2026-09-30T17:23:49.058Z → 2026-09-30T17:24:49.112Z\npartitions            48\nraw in (committed)    13689\ncanonical out         13442   (distinct source offsets found in telemetry.canonical.v1)\nDLQ                   20   (distinct source offsets found in telemetry.dlq.v1)\nduplicates dropped    227   (normaliser ledger)\ndifference            0   BALANCED",
-    "rawIn": 13689,
-    "out": 13442,
-    "dlq": 20,
-    "dups": 227,
+    "text": "window start: 48 partitions; waiting 60 s ...\nnormaliser reconcile  window 60s  2026-09-30T19:02:42.489Z → 2026-09-30T19:03:42.523Z\npartitions            48\nraw in (committed)    11764\ncanonical out         11519   (distinct source offsets found in telemetry.canonical.v1)\nDLQ                   8   (distinct source offsets found in telemetry.dlq.v1)\nduplicates dropped    237   (normaliser ledger)\ndifference            0   BALANCED",
+    "rawIn": 11764,
+    "out": 11519,
+    "dlq": 8,
+    "dups": 237,
     "seconds": 60
   }
 }

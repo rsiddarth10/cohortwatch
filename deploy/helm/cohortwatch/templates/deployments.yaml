@@ -83,8 +83,14 @@ spec:
             {{- toYaml $sc | nindent 12 }}
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
+            {{- range $i, $d := $svc.writableDirs }}
+            - { name: writable-{{ $i }}, mountPath: {{ $d }} }
+            {{- end }}
       volumes:
         - { name: tmp, emptyDir: {} }
+        {{- range $i, $d := $svc.writableDirs }}
+        - { name: writable-{{ $i }}, emptyDir: {} }
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

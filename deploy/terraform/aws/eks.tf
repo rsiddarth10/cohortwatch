@@ -1,4 +1,4 @@
-# EKS: private endpoint + public endpoint restricted by CIDR in real use; secrets envelope-encrypted with KMS.
+# EKS: private API endpoint only (admins reach it through the VPC: VPN or SSM bastion); secrets envelope-encrypted with KMS.
 data "aws_iam_policy_document" "eks_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -27,7 +27,7 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = aws_subnet.private[*].id
     security_group_ids      = [aws_security_group.nodes.id]
     endpoint_private_access = true
-    endpoint_public_access  = true
+    endpoint_public_access  = false
   }
   encryption_config {
     resources = ["secrets"]

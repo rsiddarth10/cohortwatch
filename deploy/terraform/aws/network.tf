@@ -86,10 +86,21 @@ resource "aws_security_group" "nodes" {
   vpc_id      = aws_vpc.main.id
   description = "EKS worker nodes"
   egress {
-    description = "all egress (NAT for images and OIDC JWKS)"
+    description = "inside the VPC: MSK 9094, Postgres 5432, Redis 6379, DNS, node-to-node"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
+    cidr_blocks = [var.vpc_cidr]
+  }
+  # HTTPS out through the NAT: container images and the OIDC provider's JWKS. The destinations are external
+  # services without fixed IPs, so the CIDR cannot be narrower. Kubernetes NetworkPolicies limit which pods use it.
+  #trivy:ignore:AVD-AWS-0104
+  egress {
+    description = "HTTPS to image registries and the OIDC provider (JWKS), via NAT"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    #trivy:ignore:AVD-AWS-0104
     cidr_blocks = ["0.0.0.0/0"]
   }
 }

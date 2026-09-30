@@ -120,7 +120,7 @@ services:
     db: none
     public: true
     kafka: false
-    readOnlyRootFilesystem: false # nginx writes its cache dirs
+    writableDirs: [/var/cache/nginx] # unprivileged nginx: cache on an emptyDir, the root filesystem stays read-only
     probePath: /
     resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 250m, memory: 128Mi } }
   simulator:

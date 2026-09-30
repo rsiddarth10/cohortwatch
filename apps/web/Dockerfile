@@ -20,7 +20,9 @@ ARG VITE_OIDC_ISSUER=http://localhost:3200
 ENV VITE_OIDC_ISSUER=$VITE_OIDC_ISSUER
 RUN npm run build -w @cw/web
 
-FROM nginx:1.27.3-alpine
+# Unprivileged nginx (runs as uid 101; pid and temp files under /tmp), so the container never runs as root.
+FROM nginxinc/nginx-unprivileged:1.27.3-alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 3000
+USER 101

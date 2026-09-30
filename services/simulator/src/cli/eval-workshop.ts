@@ -114,7 +114,6 @@ async function main(): Promise<void> {
       .map(([v]) => scoreOf.get(v))
       .filter((x): x is Item => !!x);
     const loudAbove = loud.filter((l) => l.score > minSister || l.pinned).length;
-    const loudS1Above = s1Items.filter((i) => roleOf.get(i.vin) === 'loud_stable').length;
     // over the whole run: any depot version where a loud van ranked above an S1 sister of the same depot
     const [lr] = await q<{ queued: number; today: number; above: number }>(
       `WITH items AS (

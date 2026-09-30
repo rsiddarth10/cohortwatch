@@ -75,9 +75,9 @@ describe('template agent service (real Postgres as cw_app)', () => {
   it('campaign event → polite notes applied, one PENDING proposal + outbox row; a repeat does nothing', async () => {
     const agent = new Agent(pool, 'agent.proposals.v1');
     const e = { type: 'OPENED', campaignId: C1, eventId: 'ev-1' };
-    expect(await agent.onCampaignEvent(e)).toEqual({ notes: 3, proposal: true });
+    expect(await agent.onCampaignEvent(e)).toEqual({ notes: 3, proposal: 'CREATED' });
     expect(await agent.onCampaignEvent(e)).toBeNull(); // same event id
-    expect(await agent.onCampaignEvent({ ...e, type: 'GREW', eventId: 'ev-2' })).toEqual({ notes: 3, proposal: false });
+    expect(await agent.onCampaignEvent({ ...e, type: 'GREW', eventId: 'ev-2' })).toEqual({ notes: 3, proposal: null });
     expect(await n(`SELECT count(*) AS n FROM core.agent_note`)).toBe(3);
     const p = (await admin.query(`SELECT action_type, status, created_by, tenant_id, payload, diff FROM core.proposal`))
       .rows;
@@ -90,6 +90,34 @@ describe('template agent service (real Postgres as cw_app)', () => {
     expect(p[0].diff.summary).toMatch(/1 van moves into tomorrow's bays/);
     expect(await n(`SELECT count(*) AS n FROM core.outbox WHERE topic = 'agent.proposals.v1'`)).toBe(1);
     expect(await n(`SELECT count(*) AS n FROM core.queue_booking`)).toBe(0); // disruptive: never applied by itself
+  });
+
+  it('one live proposal per campaign: updated in place when the sisters change, withdrawn when none are left', async () => {
+    const agent = new Agent(pool, 'agent.proposals.v1');
+    await admin.query(`UPDATE core.campaign_at_risk SET active = false WHERE vin = $1`, [S2]);
+    expect((await agent.onCampaignEvent({ type: 'AT_RISK_CHANGED', campaignId: C1, eventId: 'ev-3' }))!.proposal).toBe(
+      'UPDATED',
+    );
+    const live = (
+      await admin.query(`SELECT status, version, payload FROM core.proposal WHERE action_type = 'BOOK_AT_RISK'`)
+    ).rows;
+    expect(live).toHaveLength(1);
+    expect(live[0]).toMatchObject({ status: 'PENDING', version: 2, payload: [{ vin: S1, slot: 'TOMORROW' }] });
+    await admin.query(`UPDATE core.campaign_at_risk SET active = false`);
+    expect((await agent.onCampaignEvent({ type: 'AT_RISK_CHANGED', campaignId: C1, eventId: 'ev-4' }))!.proposal).toBe(
+      'WITHDRAWN',
+    );
+    await admin.query(`UPDATE core.campaign_at_risk SET active = true`);
+    // the original set returns: the withdrawn proposal with that id comes back to life
+    expect((await agent.onCampaignEvent({ type: 'AT_RISK_CHANGED', campaignId: C1, eventId: 'ev-5' }))!.proposal).toBe(
+      'CREATED',
+    );
+    const all = (
+      await admin.query(`SELECT status, payload FROM core.proposal WHERE action_type = 'BOOK_AT_RISK' ORDER BY status`)
+    ).rows;
+    expect(all.map((r) => r.status)).toEqual(['PENDING']);
+    expect(all[0].payload).toHaveLength(2);
+    expect(await n(`SELECT count(*) AS n FROM core.outbox WHERE topic = 'agent.proposals.v1'`)).toBe(4);
   });
 
   it('a runaway outside today → a MOVE_RUNAWAY proposal; the same queue version again does nothing', async () => {

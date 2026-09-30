@@ -41,7 +41,7 @@ CREATE TABLE core.proposal (
   evidence     jsonb NOT NULL,             -- [{source, id, text}]: cited clues and numbers only
   diff         jsonb NOT NULL,             -- dry-run of the queue change: [{vin, from, to}] + summary
   payload      jsonb NOT NULL,             -- what approval applies: [{vin, slot}]
-  status       text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
+  status       text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN')),
   version      integer NOT NULL DEFAULT 1,
   created_by   text NOT NULL DEFAULT 'agent',
   decided_by   text,
@@ -50,6 +50,9 @@ CREATE TABLE core.proposal (
   CHECK (decided_by IS NULL OR decided_by <> created_by)   -- the agent never approves its own proposals
 );
 CREATE INDEX proposal_pending_idx ON core.proposal (tenant_id, created_at DESC) WHERE status = 'PENDING';
+-- The agent keeps at most one live proposal per campaign and action: it updates it as the at-risk set changes,
+-- and withdraws it when nothing is left to book (ADR 0020).
+CREATE UNIQUE INDEX proposal_one_pending_idx ON core.proposal (campaign_id, action_type) WHERE status = 'PENDING' AND campaign_id IS NOT NULL;
 
 CREATE TABLE core.agent_note (
   id           bigserial PRIMARY KEY,

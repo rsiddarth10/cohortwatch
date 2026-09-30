@@ -95,27 +95,63 @@ export class Agent {
   ): Promise<boolean> {
     const r = await c.query(
       `INSERT INTO core.proposal (id, tenant_id, depot_id, campaign_id, trigger, action_type, title, body, evidence, diff, payload)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (id) DO UPDATE SET status = 'PENDING', version = core.proposal.version + 1, trigger = EXCLUDED.trigger,
+         title = EXCLUDED.title, body = EXCLUDED.body, evidence = EXCLUDED.evidence, diff = EXCLUDED.diff,
+         payload = EXCLUDED.payload, decided_at = NULL WHERE core.proposal.status = 'WITHDRAWN'`,
       [p.id, tenant, depotId, campaignId, trigger, p.actionType, p.title, p.body, JSON.stringify(p.evidence), JSON.stringify(p.diff), JSON.stringify(p.payload)],
     ); // prettier-ignore
-    if ((r.rowCount ?? 0) === 0) return false;
-    await c.query('INSERT INTO core.outbox (id, topic, key, payload) VALUES (gen_random_uuid(), $1, $2, $3)', [
-      this.proposalsTopic,
-      String(depotId),
-      JSON.stringify({
-        type: 'CREATED',
-        proposal_id: p.id,
-        depot_id: depotId,
-        tenant_id: tenant,
-        action_type: p.actionType,
-        title: p.title,
-      }),
-    ]);
+    if ((r.rowCount ?? 0) === 0) return false; // same set proposed before and decided (e.g. rejected): not again
+    await this.emit(c, 'CREATED', tenant, depotId, p.id, p.actionType, p.title);
     return true;
   }
 
-  async onCampaignEvent(e: CampaignEvent): Promise<{ notes: number; proposal: boolean } | null> {
-    if (!['OPENED', 'GREW', 'AT_RISK_CHANGED', 'REOPENED'].includes(e.type)) return null;
+  private async emit(c: pg.PoolClient, type: string, tenant: number, depotId: number, id: string, actionType: string, title: string): Promise<void> {
+    await c.query('INSERT INTO core.outbox (id, topic, key, payload) VALUES (gen_random_uuid(), $1, $2, $3)', [
+      this.proposalsTopic,
+      String(depotId),
+      JSON.stringify({ type, proposal_id: id, depot_id: depotId, tenant_id: tenant, action_type: actionType, title }),
+    ]);
+  } // prettier-ignore
+
+  /**
+   * At most one live (PENDING) booking proposal per campaign: created, updated in place when the at-risk set changes
+   * (its version bumps, so a lead approving an older view gets 409 and re-reads), or withdrawn when nothing is left
+   * to book or the campaign is no longer open.
+   */
+  private async syncCampaignProposal(
+    c: pg.PoolClient,
+    camp: { tenant: number; depot_id: number },
+    campaignId: string,
+    trigger: string,
+    p: ReturnType<typeof onCampaign>['proposal'],
+  ): Promise<'CREATED' | 'UPDATED' | 'WITHDRAWN' | null> {
+    const cur = await c.query<{ id: string; payload: { vin: string; slot: string }[]; title: string }>(
+      `SELECT id, payload, title FROM core.proposal WHERE campaign_id = $1 AND action_type = 'BOOK_AT_RISK' AND status = 'PENDING' FOR UPDATE`,
+      [campaignId],
+    ); // prettier-ignore
+    const live = cur.rows[0];
+    if (!p) {
+      if (!live) return null;
+      await c.query(`UPDATE core.proposal SET status = 'WITHDRAWN', version = version + 1, decided_at = now() WHERE id = $1`, [live.id]); // prettier-ignore
+      await this.emit(c, 'WITHDRAWN', camp.tenant, camp.depot_id, live.id, 'BOOK_AT_RISK', live.title);
+      return 'WITHDRAWN';
+    }
+    if (!live)
+      return (await this.writeProposal(c, camp.tenant, camp.depot_id, campaignId, trigger, p)) ? 'CREATED' : null;
+    const key = (x: { vin: string; slot: string }[]) => x.map((b) => `${b.vin}:${b.slot}`).join(',');
+    if (key(live.payload) === key(p.payload)) return null;
+    await c.query(
+      `UPDATE core.proposal SET title = $2, body = $3, evidence = $4, diff = $5, payload = $6, trigger = $7, version = version + 1 WHERE id = $1`,
+      [live.id, p.title, p.body, JSON.stringify(p.evidence), JSON.stringify(p.diff), JSON.stringify(p.payload), trigger],
+    ); // prettier-ignore
+    await this.emit(c, 'UPDATED', camp.tenant, camp.depot_id, live.id, 'BOOK_AT_RISK', p.title);
+    return 'UPDATED';
+  }
+
+  async onCampaignEvent(
+    e: CampaignEvent,
+  ): Promise<{ notes: number; proposal: 'CREATED' | 'UPDATED' | 'WITHDRAWN' | null } | null> {
     return this.tx(async (c) => {
       const first = await c.query(
         `INSERT INTO core.processed_event (source, id) VALUES ('agent-campaign', $1) ON CONFLICT DO NOTHING`,
@@ -135,7 +171,12 @@ export class Agent {
         [e.campaignId],
       );
       const camp = g.rows[0];
-      if (!camp || camp.status !== 'OPEN') return null;
+      if (!camp) return null;
+      if (camp.status !== 'OPEN') {
+        // dismissed, merged or closed: nothing left to book
+        const w = await this.syncCampaignProposal(c, camp, e.campaignId, e.eventId, null);
+        return w ? { notes: 0, proposal: w } : null;
+      }
       const clues = await c.query<{ ord: number; clue_type: string; text: string }>('SELECT ord, clue_type, text FROM core.campaign_clue WHERE campaign_id = $1 ORDER BY ord', [e.campaignId]); // prettier-ignore
       const atRisk = await c.query<{ vin: string; reason: string }>(
         'SELECT vin::text AS vin, reason FROM core.campaign_at_risk WHERE campaign_id = $1 AND active ORDER BY first_ts',
@@ -166,10 +207,8 @@ export class Agent {
         );
       }
       // disruptive action → a proposal for a lead
-      const created = out.proposal
-        ? await this.writeProposal(c, camp.tenant, camp.depot_id, e.campaignId, e.eventId, out.proposal)
-        : false;
-      return { notes: out.notes.length, proposal: created };
+      const proposal = await this.syncCampaignProposal(c, camp, e.campaignId, e.eventId, out.proposal);
+      return { notes: out.notes.length, proposal };
     });
   }
 
@@ -256,8 +295,8 @@ export async function startAgent(c: AgentConfig): Promise<{ stop(): Promise<void
           if (r) {
             actions.inc({ kind: 'note' }, r.notes);
             if (r.proposal) {
-              actions.inc({ kind: 'proposal' });
-              log.info({ campaign: (v as CampaignEvent).campaignId }, 'proposal written: book the at-risk sisters');
+              actions.inc({ kind: `proposal_${r.proposal.toLowerCase()}` });
+              log.info({ campaign: (v as CampaignEvent).campaignId, proposal: r.proposal }, 'booking proposal');
             }
           }
         } else if (await agent.onQueueEvent(v)) {

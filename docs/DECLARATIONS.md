@@ -6,9 +6,11 @@ Required by the problem statement §14: all open-source components and AI tools 
 
 | Tool | Used for | Human role |
 |---|---|---|
-| Claude Code (Anthropic, Claude Opus model) | Reviewing the brief against the problem statement; scaffolding the monorepo; writing simulator, domain, migrations, compose, CI, tests and docs from the author's brief | Author wrote the product brief and step prompts, approved each step's plan, reviews every commit and runs the done-checks |
+| Claude Code (Anthropic, Claude Opus model) | Reviewing the brief against the problem statement; scaffolding the monorepo; writing simulator, domain, migrations, compose, CI, API, web app, tests and docs from the author's brief | Author wrote the product brief and step prompts, approved each step's plan, reviews every commit and runs the done-checks |
 
 The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions are the author's own.
+
+No LLM or AI service runs inside CohortWatch: the S8 "agent" is a template engine over existing evidence (ADR 0020).
 
 ## Open-source software
 
@@ -27,7 +29,22 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | `@aws-sdk/client-s3`, `@aws-sdk/lib-storage` | Apache-2.0 | S3-compatible lake uploads (any endpoint) |
 | `ioredis` | MIT | Normaliser per-VIN anti-replay state (MGET + Lua compare-and-set per batch) |
 | `@kafkajs/confluent-schema-registry` | MIT | Registering the canonical Avro schema (BACKWARD compatibility) |
+| `oidc-provider` | MIT | S7: local OpenID Connect issuer (code + PKCE, JWKS, JWT access tokens) — ADR 0018 |
+| `jose` | MIT | S7: JWT verification in the API (JWKS, issuer, audience, expiry) |
+| `express`, `helmet`, `express-rate-limit` | MIT | S7: API server, security headers, per-user rate limits |
+| `@asteasolutions/zod-to-openapi` | MIT | S7: OpenAPI 3 document generated from the zod schemas (`/openapi.json`, `/docs`) |
 | `avsc` | MIT | Avro encoding of canonical events (Confluent wire format); decoding in the state processor with the writer schema fetched by id (S3) |
+
+### Web app (S8)
+
+| Package | License | Why |
+|---|---|---|
+| React, React DOM | MIT | UI |
+| `react-router-dom` | MIT | Routing (board, campaign, vehicle, agent & audit) |
+| Recharts | MIT | Vehicle-vs-own-normal chart (band, incident and repair markers) |
+| `oidc-client-ts` | Apache-2.0 | Browser OIDC login (code + PKCE) |
+| Vite, `@vitejs/plugin-react` | MIT | Dev server and build |
+| Swagger UI (`swagger-ui-dist`, loaded from unpkg on `/docs`) | Apache-2.0 | API explorer |
 
 ### Batch jobs (Python, S3)
 
@@ -47,6 +64,8 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | Prettier | MIT | Formatting |
 | `testcontainers`, `@testcontainers/redpanda` | MIT | Integration tests against real Redpanda + Redis (+ TimescaleDB from S3) containers (from S2) |
 | `@amiceli/vitest-cucumber` 8.0.0 | ISC | BDD: Gherkin feature files (`tests/bdd/*.feature`) run inside Vitest (S5) |
+| `supertest` | MIT | S7: API integration tests (HTTP against the app, real Postgres with RLS) |
+| Playwright (`@playwright/test`, Chromium) | Apache-2.0 | S8: e2e smoke through the real login (local only) and the screenshots |
 
 ### Infrastructure images
 
@@ -59,6 +78,7 @@ The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions a
 | RustFS `1.0.0` | Apache-2.0 | S3-compatible object store for the Parquet lake |
 | AWS CLI `2.37.4` | Apache-2.0 | One-shot bucket creation (`lake-init`) |
 | Node.js `22.23.3-bookworm-slim` | MIT | Service runtime |
+| nginx `1.27.3-alpine` | BSD-2-Clause | S8: serves the web app; proxies `/api` (SSE unbuffered) |
 | Python `3.12.11-slim-bookworm` | PSF-2.0 | Runtime of the baselines batch job (S3) |
 
 ### CI

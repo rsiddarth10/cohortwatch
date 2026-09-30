@@ -17,6 +17,7 @@ COPY services/api/package.json services/api/
 COPY services/agent/package.json services/agent/
 COPY apps/web/package.json apps/web/
 RUN npm ci --no-audit --no-fund
+COPY packages/domain packages/domain
 COPY packages/common packages/common
 COPY services/auth services/auth
 RUN npx tsc -b services/auth \
@@ -27,6 +28,8 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/packages/domain/package.json packages/domain/
+COPY --from=build --chown=node:node /app/packages/domain/dist packages/domain/dist
 COPY --from=build --chown=node:node /app/packages/common/package.json packages/common/
 COPY --from=build --chown=node:node /app/packages/common/dist packages/common/dist
 COPY --from=build --chown=node:node /app/services/auth/package.json services/auth/

@@ -67,7 +67,7 @@ const CampaignList = Page.extend({ status: z.enum(['OPEN', 'DISMISSED', 'CLOSED'
 const DismissBody = z.object({ reason: z.string().min(3).max(500) });
 const RepairBody = z.object({ repaired_at: z.iso.datetime().optional() });
 const NormalQuery = z.object({ metric: z.enum(['coolant_c', 'batt_temp_c', 'lv_batt_v']).optional() });
-const ProposalList = Page.extend({ status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional() });
+const ProposalList = Page.extend({ status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN']).optional() });
 const DepotId = z.object({ id: z.coerce.number().int().positive() });
 
 function doc(

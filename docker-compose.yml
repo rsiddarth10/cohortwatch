@@ -526,6 +526,26 @@ services:
       retries: 12
     restart: unless-stopped
 
+  # S8 web app (React + Vite, served by nginx; /api → api). Log in at http://localhost:3000.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_OIDC_ISSUER: ${OIDC_ISSUER:-http://localhost:3200}
+    image: cohortwatch/web:dev
+    ports:
+      - '3000:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
 volumes:
   redpanda-data:
   postgres-data:

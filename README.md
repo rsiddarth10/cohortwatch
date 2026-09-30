@@ -6,21 +6,52 @@ Each van is compared to **its own normal**, minus what its peers in the same con
 persist become incidents with plain-language clues, and incidents that share a cause become one **campaign**
 (fault family × model × duty × depot). Full scope: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
 
-> Status: **steps S4 + S6** (after S5). Built so far:
+> Status: **steps S7 + S8** (after S4 + S6). Built so far:
 > - a 100,000-vehicle simulator (planted outbreaks, decoys, realistic mess, two OEM formats, 7 days of history in an
 >   S3 lake, private ground truth);
-> - the normaliser (S2);
-> - the state processor, which compares each van with its own normal minus its peers and raises incidents with
->   clues and runaway flags (S3);
-> - the campaign engine, which groups incidents per fault family | model | duty | depot, opens a campaign only when
->   ≥ 5 vans is far more than chance (Poisson, against the same cohort elsewhere in the region), flags at-risk
->   sisters, and explains itself (firmware clue, similar past campaigns, cost if not fixed) (S5);
+> - the normaliser (S2) and the state processor, which compares each van with its own normal minus its peers and
+>   raises incidents with clues and runaway flags (S3);
+> - the campaign engine: per fault family | model | duty | depot, a campaign opens only when ≥ 5 vans is far more
+>   than chance; at-risk sisters, firmware clue, similar past campaigns, cost if not fixed (S5);
 > - the workshop service: each depot's ranked queue for today's and tomorrow's bays, with reasons and the cost of
->   waiting, runaway cards, and fix confirmation after a repair (fixed ✓ / not fixed / pending) that closes a
->   campaign only when all its members are fixed (S4 + S6).
+>   waiting, runaway cards, and fix confirmation after a repair (S4 + S6);
+> - **login, API, agent and web app (S7 + S8):** local OIDC login (lead / planner / viewer), a REST API with
+>   tenant isolation by Postgres RLS, viewer masking, every view audited, live updates over SSE; a template agent
+>   (no LLM) that cites its evidence and only *proposes* bay changes, which a lead approves; the web board.
 >
 > On the S3 scorecard (N = 5,000): it catches the same real faults as a global threshold (35/35) with 4.1 vs 126
-> false incidents per 1,000 healthy vans. Queue, campaigns, API and UI come in later steps.
+> false incidents per 1,000 healthy vans.
+
+## Open the app
+
+After `docker compose up -d` (below), open **http://localhost:3000** and sign in:
+
+| User | Password | Role | Can |
+|---|---|---|---|
+| `lead` | `lead-demo` | reliability lead | everything: approve agent proposals, dismiss a campaign, record repairs, read the audit trail |
+| `planner` | `planner-demo` | workshop planner | read, record repairs |
+| `viewer` | `viewer-demo` | viewer | read only; no drivers, no precise locations |
+| `lead2` | `lead2-demo` | lead of another tenant | sees none of tenant 1's vans (RLS) |
+
+| What | Where |
+|---|---|
+| Web app | http://localhost:3000 |
+| API + OpenAPI explorer | http://localhost:3100/docs (`/openapi.json`); the web app calls it through `/api` |
+| Login (OIDC issuer) | http://localhost:3200 (`/.well-known/openid-configuration`) |
+
+### Retell the story in 5 minutes (video preset, about 5–8 wall-minutes after start)
+
+1. **Board** (as `lead`): the depot with open campaigns comes first. Today's bays hold the runaway (red card,
+   "≈ N h to 110 °C") and the outbreak vans; the loud-but-stable van waits. Each card says *why* and what waiting
+   costs.
+2. **Campaign** (click the purple card): the S1 COOLING outbreak, with its clues (same place, trend, firmware
+   4.2.1 before onset vs healthy sisters), its members and the **at-risk sisters** that are not faulty yet.
+3. **Vehicle** (click a member): its readings against **its own normal band**, with incident (red) and repair
+   (green) markers, and its fix status.
+4. **Agent & audit**: the agent proposes booking the at-risk sisters into tomorrow's bays, with its evidence and a
+   dry-run diff. **Approve**: the board updates live ("booked by lead (approved agent proposal)"). The audit
+   trail shows every view and action.
+5. **Sign out, sign in as `viewer`**: same board, no drivers, no coordinates (only a coarse area), no buttons.
 
 ## Quick start
 
@@ -59,7 +90,7 @@ docker compose down -v && SIM_SCALE=30000 SIM_SPEED=360 docker compose up -d
 | Lake console (RustFS) | http://localhost:19001 (user `cohortwatch`, password `cohortwatch-dev-secret`) → bucket `cohortwatch-lake` |
 | Simulator metrics | http://localhost:9464/metrics (sent by topic and format, msgs/s, mess by kind, clock lag, repairs) |
 | Simulator clock | http://localhost:9464/clock |
-| Postgres | `localhost:15432`, db `cohortwatch` (roles `cw_sim`, `cw_app`) |
+| Postgres | `localhost:15432`, db `cohortwatch` (roles `cw_sim`, `cw_app`, `cw_api`) |
 | Kafka API from the host | `localhost:19092` |
 | S3 API from the host | `http://localhost:19000` |
 

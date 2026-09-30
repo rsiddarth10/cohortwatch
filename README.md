@@ -1,31 +1,29 @@
 # CohortWatch
 
-The daily workshop queue that ranks vans by real risk, and catches shared outbreaks early.
+**The daily workshop queue that ranks vans by real risk, and catches shared outbreaks early.** Each van is compared
+to **its own normal**, minus what its peers in the same conditions are doing. Persistent deviations become incidents
+with plain-language clues; incidents that share a cause become one **campaign** (fault family × model × duty × depot).
+The queue, the agent's proposals and fix confirmation turn that into tomorrow's workshop plan.
 
-Each van is compared to **its own normal**, minus what its peers in the same conditions are doing. Deviations that
-persist become incidents with plain-language clues, and incidents that share a cause become one **campaign**
-(fault family × model × duty × depot). Full scope: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
+![Architecture: C4 container view](docs/diagrams/c4-container.png)
 
-> Status: **step S9** (evaluation, ML, load, tuning, observability) after S7 + S8. **How well it works: [docs/evaluation.md](docs/evaluation.md)** (every claim of brief §6 at 5K and 30K, with the baseline it beats). Built so far:
-> - a 100,000-vehicle simulator (planted outbreaks, decoys, realistic mess, two OEM formats, 7 days of history in an
->   S3 lake, private ground truth);
-> - the normaliser (S2) and the state processor, which compares each van with its own normal minus its peers and
->   raises incidents with clues and runaway flags (S3);
-> - the campaign engine: per fault family | model | duty | depot, a campaign opens only when ≥ 5 vans is far more
->   than chance; at-risk sisters, firmware clue, similar past campaigns, cost if not fixed (S5);
-> - the workshop service: each depot's ranked queue for today's and tomorrow's bays, with reasons and the cost of
->   waiting, runaway cards, and fix confirmation after a repair (S4 + S6);
-> - **login, API, agent and web app (S7 + S8):** local OIDC login (lead / planner / viewer), a REST API with
->   tenant isolation by Postgres RLS, viewer masking, every view audited, live updates over SSE; a template agent
->   (no LLM) that cites its evidence and only *proposes* bay changes, which a lead approves; the web board.
->
-> - **S9:** `npm run eval:all` (the evaluation page), a pausable demo clock for the video, an offline at-risk
->   classifier compared with the rules ([model card](docs/ml/model-card.md)), a batched queue tick, query tuning,
->   k6 load/soak, chaos checks, Prometheus + Grafana, and a Pact contract web → API.
+*Every service, topic and store, with protocols. More views: [diagrams](docs/diagrams/README.md) (C4 context, data
+flow of one reading, sequence diagrams, ER, Kubernetes). **How well it works: [docs/evaluation.md](docs/evaluation.md)**
+(every claim of brief §6 at 5K and 30K, against the baseline it must beat).*
 
-## Open the app
+## Quick start (5 minutes)
 
-After `docker compose up -d` (below), open **http://localhost:3000** and sign in:
+Requirements: **Docker Desktop with ~8 GB RAM** and nothing else. Synthetic data only (fictitious OEMs Aurex and
+Kestrel).
+
+```bash
+git clone https://github.com/rsiddarth10/cohortwatch.git && cd cohortwatch
+SIM_SCALE=30000 SIM_SPEED=360 AUTO_REPAIRS=on docker compose up -d   # first run builds the images (~10–15 min)
+docker compose ps                                                    # all healthy; one-shot jobs "exited (0)"
+```
+
+Open **http://localhost:3000** and sign in. The first campaign opens about **5–6 minutes after `up`** (measured:
+332 s on a clean clone). Sim time runs at 360×: 1 wall-second = 6 sim-minutes.
 
 | User | Password | Role | Can |
 |---|---|---|---|
@@ -39,51 +37,91 @@ After `docker compose up -d` (below), open **http://localhost:3000** and sign in
 | Web app | http://localhost:3000 |
 | API + OpenAPI explorer | http://localhost:3100/docs (`/openapi.json`); the web app calls it through `/api` |
 | Login (OIDC issuer) | http://localhost:3200 (`/.well-known/openid-configuration`) |
+| Grafana (optional) | `docker compose --profile observability up -d prometheus grafana` → http://localhost:3001 |
 
-### Retell the story in 5 minutes (video preset, about 5–8 wall-minutes after start)
+**30K preset vs the 100K default: an honest laptop note.** With no settings, compose runs the **submission scale,
+`SIM_SCALE=100000`**. On a laptop (12 CPUs, 16 GB for Docker) 100K works, but during the T0+24–42 h shift surge the
+state processor falls behind: the backlog peaks at ~3.8M events, and incident latency reaches tens of minutes
+(p50 ~24 min) until it drains (docs/perf/state-processor.md). **Use the 30K preset for a live demo:** through the
+surge, event → incident stays under about a minute (p95 ≤ ~45 s) and the lag drains within minutes (S9 runs, Grafana). Production sizing for 100K is in [deploy/terraform/aws](deploy/terraform/aws/README.md).
 
-1. **Board** (as `lead`): the depot with open campaigns comes first. Today's bays hold the runaway (red card,
-   "≈ N h to 110 °C") and the outbreak vans; the loud-but-stable van waits. Each card says *why* and what waiting
-   costs.
-2. **Campaign** (click the purple card): the S1 COOLING outbreak, with its clues (same place, trend, firmware
-   4.2.1 before onset vs healthy sisters), its members and the **at-risk sisters** that are not faulty yet.
-3. **Vehicle** (click a member): its readings against **its own normal band**, with incident (red) and repair
-   (green) markers, and its fix status.
-4. **Agent & audit**: the agent proposes booking the at-risk sisters into tomorrow's bays, with its evidence and a
-   dry-run diff. **Approve**: the board updates live ("booked by lead (approved agent proposal)"). The audit
-   trail shows every view and action.
-5. **Sign out, sign in as `viewer`**: same board, no drivers, no coordinates (only a coarse area), no buttons.
+### Retell the story in 5 minutes
 
-## Quick start
+Timings are for the 30K preset; details and exact clicks are in the [video runbook](docs/video-runbook.md). Freeze
+the story at any moment with **`npm run demo:pause`** (and `demo:resume`). `npm run demo:status` lists which moments
+are ready, with their URLs.
 
-Requirements: Docker Desktop (about 8 GB RAM for Docker) and nothing else.
+1. **Board** (~4:50, as `lead`): the depot with open campaigns comes first. A red **runaway card** ("≈ N h to
+   110 °C") leads the strip; today's bays hold the outbreak vans; each card says *why* and what waiting costs.
+2. **Campaign** (click the purple card): the S1 COOLING outbreak with its clues (same place, trend, firmware 4.2.1
+   before onset vs healthy sisters, "15 vans where 0.3 expected"), its members and, from ~6:15, the **at-risk
+   sisters** that are not faulty yet.
+3. **Vehicle** (click a sister): its coolant against **its own normal band**, climbing before any incident, with
+   incident (red) and repair (green) markers and its fix status.
+4. **Agent & audit**: the agent proposes booking the at-risk sisters into tomorrow's bays, citing its evidence, with a
+   dry-run diff. **Approve**: the board updates live ("booked by lead (approved agent proposal)"). The audit trail
+   shows every view and action.
+5. **Fixes and roles** (~10–14 min): repaired sisters turn **FIXED**; the bad repair turns **NOT_FIXED** and goes
+   back into today's bays. Sign in as `viewer`: same board, no drivers, only a coarse area, no buttons.
 
-```bash
-docker compose up -d        # first run builds the simulator image
-docker compose ps           # all healthy; topic-init, db-migrate and lake-init "exited (0)"
-docker compose logs -f simulator
-```
+## Documentation
 
-With no `.env`, compose runs the **submission scale, `SIM_SCALE=100000`**, in **demo mode**. On first boot the
-simulator:
+| Topic | Where |
+|---|---|
+| Evaluation (claims vs baselines, 5K and 30K) | [docs/evaluation.md](docs/evaluation.md) |
+| Test and quality evidence (tests, coverage, load, chaos, SAST/DAST, SBOM) | [docs/test-evidence/README.md](docs/test-evidence/README.md) |
+| Performance | [docs/perf/](docs/perf/): [load](docs/perf/load.md), [chaos](docs/perf/chaos.md), [queries](docs/perf/queries.md), [workshop](docs/perf/workshop.md), [state processor](docs/perf/state-processor.md), [API](docs/perf/api.md), [bench](docs/perf/simulator-bench.md) |
+| Architecture decisions (24 ADRs) | [docs/adr/README.md](docs/adr/README.md) |
+| Diagrams | [docs/diagrams/README.md](docs/diagrams/README.md) |
+| Threat model (STRIDE) and privacy | [docs/security/threat-model.md](docs/security/threat-model.md) · [scan reports](docs/security/reports/README.md) |
+| Algorithms and SQL | [docs/algorithms-and-sql.md](docs/algorithms-and-sql.md) |
+| Event streams (AsyncAPI) | [docs/asyncapi.yaml](docs/asyncapi.yaml) |
+| ML at-risk classifier | [docs/ml/model-card.md](docs/ml/model-card.md) |
+| Deployment (Helm, Terraform) | [deploy/helm/cohortwatch](deploy/helm/cohortwatch) · [deploy/terraform/aws](deploy/terraform/aws/README.md) |
+| Video runbook | [docs/video-runbook.md](docs/video-runbook.md) |
+| Brief, declarations | [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) · [docs/DECLARATIONS.md](docs/DECLARATIONS.md) |
 
-1. seeds the registry (100K vans) into Postgres with `COPY`,
-2. applies the plants (brief §5.4) and writes the ground truth,
+## Tests
+
+| Command | What | Needs |
+|---|---|---|
+| `npm ci && npm run lint && npm run typecheck` | ESLint + Prettier, TypeScript strict (all workspaces + web) | Node 22 |
+| `npm test` | 278 unit tests + BDD, v8 coverage (`packages/domain` ≥ 80%, measured 99.3%) | Node 22 |
+| `npm run test:integration` | 20 Testcontainers tests (real Redpanda, Redis, TimescaleDB) incl. API security and the Pact provider | Docker |
+| `npm run test:contract` | Pact consumer contract web → API | Node 22 |
+| `npm run test:e2e` | Playwright through the real login (lead approves a proposal; viewer masked) | the stack running, ~T0+30–60 h |
+| `npm run eval:all` | every §6 claim vs its baseline → docs/evaluation.md | a finished run (see Commands) |
+| `sh tests/load/run.sh load` · `sh tests/load/run.sh soak 600` · `sh tests/chaos/run.sh` | k6 load, soak + 50 SSE clients, chaos checks | the stack running |
+
+## Known issues
+
+- **100K on a laptop falls behind during the surge** (see the note above); it drains afterwards. Use the 30K preset
+  for demos.
+- **The at-risk moment is short.** At-risk sisters come and go every sim-hour, so a proposal can be withdrawn
+  seconds after it appears. Pause with `npm run demo:pause`.
+- **Restarting `auth` signs everyone out:** the local OIDC issuer generates its signing key at start, and its users
+  are demo users in code (dev only; ADR 0018).
+- **The e2e test is local only** (it needs the running stack). Its lead test waits up to 18 min for a pending agent
+  proposal, so run it while the story is live (~T0+30–60 h).
+- **The ML at-risk classifier is evaluated but not wired into the queue** (model card, *Decision*).
+- **`style-src 'unsafe-inline'`** stays in the web CSP (inline chart styles); scripts are strict.
+- **One stack per machine:** compose pins `name: cohortwatch` and host ports (3000, 3100, 3200, 15432, 16379,
+  19092, …). Use `-p <name>` and free the ports for a second copy.
+- **Docker Desktop on Windows stopped three times during long overnight runs** (a host issue). Starting it again
+  resumes the stack: restarts are idempotent, and the demo clock continues where it stopped.
+
+## Stack details
+
+`docker compose up -d` with no settings runs 100K vans in **demo mode**. On first boot the simulator:
+
+1. seeds the registry into Postgres with `COPY`,
+2. applies the plants (brief §5.4) and writes the ground truth (`sim` schema, `data/sim-private`, never readable
+   by detection),
 3. writes 7 sim-days of plant-free history as Parquet to `s3://cohortwatch-lake/history/dt=…/`,
-4. streams the demo: **360×** (1 wall-second = 6 sim-minutes), from T0 to **T0+72 h in about 12 wall-minutes**,
-   then keeps running.
+4. streams the demo at **360×**, from T0 to **T0+72 h in about 12 wall-minutes**, then keeps running.
 
 Restarts are idempotent: the registry, plants and history are skipped when unchanged, and the demo clock resumes
-where it stopped.
-
-**Video preset** (a smooth live demo on a laptop): `SIM_SCALE=30000 SIM_SPEED=360` with the default 3 normaliser
-replicas. That is about 30% of the 100K load. At 100K, 3 replicas keep lag low outside the T0+24–42 h surge, but
-build a backlog during it (peak 3.76M, drained afterwards). At 30K the surge stays within their capacity: expected
-from the measurements, not separately measured. The submission default stays `SIM_SCALE=100000`.
-
-```bash
-docker compose down -v && SIM_SCALE=30000 SIM_SPEED=360 docker compose up -d
-```
+where it stopped. `docker compose down -v` is the clean reset.
 
 | What | Where |
 |---|---|
@@ -219,11 +257,17 @@ services remember sequence numbers, so replaying from T0 into an existing stack 
 | `GLOBAL_COOLANT_THRESHOLD_C` / `GLOBAL_BATT_TEMP_THRESHOLD_C` | 97 / 47 | simple global thresholds: checks #10/#11, and the shadow rule the state processor runs for the evaluation baseline |
 | `STATE_REPLICAS` | 3 | state-processor replicas (up to 48) |
 | `CAMPAIGN_REPLICAS` / `CAMPAIGN_ALPHA` | 1 / 0.0001 | campaign-engine replicas (the relay runs on one leader); Poisson α |
-| `WORKSHOP_REPLICAS` / `QUEUE_MIN_BAY_SCORE` | 1 / 0.35 | workshop replicas (relay + hourly tick on one leader); minimum score for a bay |
+| `WORKSHOP_REPLICAS` / `QUEUE_MIN_BAY_SCORE` | 1 / 0.4 | workshop replicas (relay + hourly tick on one leader); minimum score for a bay |
 | `TELEMETRY` / `TELEMETRY_BUCKET_MIN` | on / 60 | telemetry writer on/off; down-sampling bucket in sim-minutes |
 | `DETECT_*`, `RUNAWAY_*`, `DTC_*` | reference plan §9.3–9.5 | detection thresholds (see `services/state-processor/src/config.ts`) |
 | `LAPTOP_RETENTION` / `KAFKA_PARTITION_BYTES` / `BENCH_PARTITION_BYTES` | on / 268435456 / 16777216 | disk caps on the high-volume and bench topics (see [Disk](#disk)) |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `LAKE_BUCKET` | RustFS in compose | any S3-compatible store works |
+| `SIM_SEED` | cohortwatch-42 | global seed; per-VIN seed = hash(seed, VIN), identical for any worker count |
+| `AGENT_ENABLED` | true | `false` keeps the agent idle; the board works without it |
+| `API_RATE_LIMIT_PER_MIN` | 600 | per-user API rate limit (raise it only for load tests) |
+| `OIDC_ISSUER` | http://localhost:3200 | issuer the web app signs in with and the API trusts |
+| `CW_SIM_PASSWORD` / `CW_APP_PASSWORD` / `CW_API_PASSWORD` | dev defaults | database role passwords (simulator/evaluation, pipeline, API with RLS) |
+| `PG_HOST_PORT` / `REDIS_HOST_PORT` | 15432 / 16379 | host ports (5432/6379 are often taken) |
 
 ### Clean reset
 

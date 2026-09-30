@@ -1,3 +1,4 @@
+/* global window, document */
 // Renders docs/diagrams/*.mmd to .svg and .png with Mermaid (pinned, from jsDelivr) in Playwright's Chromium.
 // Usage: node docs/diagrams/render.mjs
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';

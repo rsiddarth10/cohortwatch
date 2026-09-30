@@ -383,6 +383,47 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  workshop:
+    build:
+      context: .
+      dockerfile: services/workshop/Dockerfile
+    image: cohortwatch/workshop:dev
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      # cw_app: detection has no access to schema sim (ground truth)
+      DATABASE_URL: postgres://cw_app:${CW_APP_PASSWORD:-cw_app_dev}@postgres:5432/cohortwatch
+      GROUP_ID: ${WORKSHOP_GROUP_ID:-cg.workshop}
+      QUEUE_MIN_BAY_SCORE: ${QUEUE_MIN_BAY_SCORE:-0.35}
+      METRICS_PORT: 9477
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    # S4 queue + S6 fix confirmation. The outbox relay and the hourly (event-time) tick run on the advisory-lock
+    # leader only, so extra replicas only add consumers.
+    deploy:
+      replicas: ${WORKSHOP_REPLICAS:-1}
+    ports:
+      - '9477-9478:9477' # Prometheus /metrics, /healthz
+    # NO data/sim-private mount: detection services never see ground truth.
+    depends_on:
+      baselines:
+        condition: service_completed_successfully
+      topic-init:
+        condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:9477/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
 volumes:
   redpanda-data:
   postgres-data:

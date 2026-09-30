@@ -18,6 +18,9 @@
     },
     {
       "path": "services/campaign-engine"
+    },
+    {
+      "path": "services/workshop"
     }
   ]
 }

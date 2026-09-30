@@ -1,0 +1,23 @@
+{
+  "name": "@cw/workshop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "S4 + S6 workshop: the daily queue per depot (ranked, bays, reasons, cost of waiting), runaway cards, fix confirmation; outbox -> queue.events.v1 and workshop.outcomes.v1.",
+  "main": "./dist/main.js",
+  "scripts": {
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@cw/common": "0.1.0",
+    "@cw/domain": "0.1.0",
+    "pg": "^8.23.0",
+    "prom-client": "^15.1.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@testcontainers/redpanda": "^12.2.0",
+    "@types/pg": "^8.23.1",
+    "testcontainers": "^12.2.0"
+  }
+}

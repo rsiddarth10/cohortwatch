@@ -12,7 +12,8 @@
     "services/simulator",
     "services/normaliser",
     "services/state-processor",
-    "services/campaign-engine"
+    "services/campaign-engine",
+    "services/workshop"
   ],
   "scripts": {
     "build": "tsc -b",
@@ -35,7 +36,8 @@
     "eval:incidents": "tsc -b && node services/simulator/dist/cli/eval-incidents.js",
     "vehicle:normal": "tsc -b && node services/state-processor/dist/cli/vehicle-normal.js",
     "campaign:dismiss": "tsc -b && node services/campaign-engine/dist/cli/dismiss.js",
-    "eval:campaigns": "tsc -b && node services/simulator/dist/cli/eval-campaigns.js"
+    "eval:campaigns": "tsc -b && node services/simulator/dist/cli/eval-campaigns.js",
+    "eval:workshop": "tsc -b && node services/simulator/dist/cli/eval-workshop.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

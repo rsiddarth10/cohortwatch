@@ -452,6 +452,46 @@ services:
       retries: 12
     restart: unless-stopped
 
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    image: cohortwatch/api:dev
+    environment:
+      PORT: 3100
+      # cw_api: row-level security by tenant; every request sets app.tenant_id (ADR 0019)
+      DATABASE_URL: postgres://cw_api:${CW_API_PASSWORD:-cw_api_dev}@postgres:5432/cohortwatch
+      KAFKA_BROKERS: redpanda:9092
+      OIDC_ISSUER: ${OIDC_ISSUER:-http://localhost:3200}
+      OIDC_JWKS_URL: http://auth:3200/jwks
+      API_AUDIENCE: urn:cohortwatch:api
+      RATE_LIMIT_PER_MIN: ${API_RATE_LIMIT_PER_MIN:-600}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - '3100:3100'
+    # NO data/sim-private mount.
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      topic-init:
+        condition: service_completed_successfully
+      auth:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
 volumes:
   redpanda-data:
   postgres-data:

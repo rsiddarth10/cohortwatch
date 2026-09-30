@@ -82,7 +82,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON core.proposal, core.agent_note, core.que
 GRANT SELECT ON core.proposal, core.agent_note, core.queue_booking, core.audit TO cw_api, cw_sim;
 GRANT INSERT ON core.audit, core.outbox, core.campaign_override, core.queue_booking TO cw_api;
 GRANT UPDATE ON core.outbox TO cw_api; -- its relay publishes audit.v1 / agent.proposals.v1 rows
-GRANT UPDATE ON core.campaign, core.proposal, core.driver, core.alert_card TO cw_api;
+GRANT UPDATE ON core.campaign, core.proposal, core.driver, core.alert_card, core.queue_booking TO cw_api;
 GRANT DELETE ON core.driver_assignment TO cw_api;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA core TO cw_api, cw_app;
 

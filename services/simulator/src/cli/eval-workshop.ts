@@ -115,10 +115,21 @@ async function main(): Promise<void> {
       .filter((x): x is Item => !!x);
     const loudAbove = loud.filter((l) => l.score > minSister || l.pinned).length;
     const loudS1Above = s1Items.filter((i) => roleOf.get(i.vin) === 'loud_stable').length;
+    // over the whole run: any depot version where a loud van ranked above an S1 sister of the same depot
+    const [lr] = await q<{ queued: number; today: number; above: number }>(
+      `WITH items AS (
+         SELECT s.depot_id, s.version, i->>'vin' AS vin, (i->>'rank')::int AS rank, i->>'slot' AS slot, g.role
+         FROM core.queue_snapshot s, jsonb_array_elements(s.items) i JOIN sim.ground_truth g ON g.vin = i->>'vin')
+       SELECT count(DISTINCT vin) FILTER (WHERE role = 'loud_stable')::int AS queued,
+              count(DISTINCT vin) FILTER (WHERE role = 'loud_stable' AND slot = 'TODAY')::int AS today,
+              (SELECT count(*) FROM items l JOIN items x ON x.depot_id = l.depot_id AND x.version = l.version
+                 AND x.role = 's1_sister' AND l.rank < x.rank WHERE l.role = 'loud_stable')::int AS above
+       FROM items`,
+    );
     rows.push([
       'Loud-but-stable',
       'none above any S1 sister',
-      `${loudAbove} of ${loud.length} queued loud vans above the lowest-scored S1 sister (${minSister.toFixed(2)}); ${loudS1Above} at ${s1!.code}`,
+      `snapshot: ${loudAbove} of ${loud.length} queued loud vans above the lowest S1 sister (${minSister.toFixed(2)}); whole run: ${lr!.queued} loud vans ever queued, ${lr!.today} ever in today's bays, ${lr!.above} times above an S1 sister at the same depot`,
     ]);
 
     // runaway

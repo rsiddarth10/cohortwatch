@@ -15,7 +15,7 @@ is in `packages/domain` (pure, ≥ 80% test coverage) unless noted. *N* = vans, 
 | 8 | Time to limit (runaway) | `detect/ttl.ts` | O(1) | runaway plant |
 | 9 | Poisson guard | `campaign/poisson.ts` | O(k) for the tail | 100K, heatwave + background |
 | 10 | Union-find (merge) | `campaign/unionfind.ts` | ≈ O(α(m)) per op | 30K |
-| 11 | Feature-vector similarity | `campaign/similarity.ts` | O(P·F) | 12 past campaigns |
+| 11 | Feature-vector similarity | `campaign/similarity.ts` | O(P·F) | 30 synthetic past campaigns |
 | 12 | Queue scoring + bay filling | `queue/queue.ts`, `queue/bookings.ts` | O(q log q) per depot | 30K, ~120 depots |
 | 13 | Fix confirmation | `repair/confirm.ts` | O(h) per repair | 15 repairs incl. a bad one |
 

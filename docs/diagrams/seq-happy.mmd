@@ -1,0 +1,33 @@
+%% Sequence 1: happy path of one reading → campaign → queue → UI
+sequenceDiagram
+  autonumber
+  participant OEM as OEM cloud (simulator)
+  participant K as Kafka (Redpanda)
+  participant N as Normaliser
+  participant R as Redis
+  participant SP as State processor
+  participant PG as Postgres
+  participant CE as Campaign engine
+  participant WS as Workshop
+  participant API as API
+  participant UI as Web board
+  OEM->>K: produce raw reading (raw.oem-a.v1, key = VIN)
+  K->>N: consume batch
+  N->>R: anti-replay check + sequence (Lua CAS per VIN)
+  N->>K: produce canonical Avro (telemetry.canonical.v1)
+  N->>K: commit raw offsets (after produce acks)
+  K->>SP: consume canonical
+  SP->>SP: deviation vs own normal − peers, EW trend, k of n
+  SP->>PG: incident row + hourly telemetry (COPY)
+  SP->>K: produce OPEN (incidents.v1)
+  K->>CE: consume incident
+  CE->>PG: tx: join (PK campaign, vin), Poisson guard → OPEN, clues, outbox row
+  CE-->>K: outbox relay → campaign.events.v1 (OPENED)
+  K->>WS: consume incident + campaign event
+  WS->>PG: tx: re-rank depot, new queue version, outbox row
+  WS-->>K: outbox relay → queue.events.v1
+  K->>API: consume (SSE bus, tenant filter)
+  API-->>UI: SSE "queue" (a change notice, no data)
+  UI->>API: GET /depots/:id/queue (JWT)
+  API->>PG: tx as cw_api: SET LOCAL tenant (RLS), read, audit + outbox
+  API-->>UI: ranked queue with reasons and cost of waiting

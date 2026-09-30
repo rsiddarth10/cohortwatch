@@ -11,3 +11,4 @@ playwright-report
 docs/eval/*.json
 docs/ml/*.json
 pacts
+docs/diagrams/*.svg

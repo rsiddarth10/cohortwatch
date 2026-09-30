@@ -1,0 +1,39 @@
+%% Deployment view (Kubernetes on AWS; deploy/helm/cohortwatch + deploy/terraform/aws)
+flowchart TB
+  user["Browser"] -->|"HTTPS (TLS via cert-manager)"| ing["Ingress (nginx)"]
+  oem["OEM clouds"] -->|"Kafka over mTLS + topic ACLs"| msk
+  subgraph eks["EKS cluster (private subnets)"]
+    subgraph ns["namespace cohortwatch (NetworkPolicy: default deny + explicit allows)"]
+      ing --> webd["web (Deployment)"]
+      ing --> apid["api (Deployment, 2+ replicas)"]
+      normd["normaliser (Deployment, HPA 3–12)"]
+      spd["state-processor (Deployment, HPA 3–12)"]
+      ced["campaign-engine (Deployment, advisory-lock leader)"]
+      wsd["workshop (Deployment, advisory-lock leader)"]
+      agd["agent (Deployment)"]
+      es["ExternalSecret → Kubernetes Secret"]
+    end
+    subgraph tsdb["namespace timescale"]
+      pgts[("TimescaleDB (self-managed StatefulSet)<br/>EBS gp3, KMS-encrypted")]
+    end
+  end
+  msk[("Amazon MSK (Kafka API)<br/>TLS in transit, KMS at rest")]
+  redis[("ElastiCache Redis<br/>TLS in transit, KMS at rest")]
+  s3[("S3 lake<br/>SSE-KMS, public access blocked")]
+  sm[("AWS Secrets Manager")]
+  idp[("OIDC identity provider")]
+  normd --> msk
+  spd --> msk
+  ced --> msk
+  wsd --> msk
+  agd --> msk
+  apid --> msk
+  normd --> redis
+  spd --> redis
+  spd -->|"TLS 5432"| pgts
+  ced -->|"TLS 5432"| pgts
+  wsd -->|"TLS 5432"| pgts
+  agd -->|"TLS 5432"| pgts
+  apid -->|"TLS 5432"| pgts
+  apid -->|"JWKS over HTTPS"| idp
+  es --> sm

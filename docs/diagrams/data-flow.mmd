@@ -1,0 +1,17 @@
+%% Data flow of one reading: raw → canonical → incident → campaign → queue → UI
+flowchart LR
+  r["Van reading<br/>(OEM format; maybe late,<br/>duplicated, °F, bad VIN)"] -->|raw.oem-*.v1| n{"Normaliser"}
+  n -->|invalid / bad VIN| dlq[("telemetry.dlq.v1")]
+  n -->|seen before| drop["dropped as duplicate<br/>(counted in /ledger)"]
+  n -->|canonical Avro, °C, DTC family| c[("telemetry.canonical.v1")]
+  c --> s{"State processor"}
+  s -->|"deviation vs own normal<br/>minus peers, EW trend"| h[("core.telemetry hourly rows")]
+  s -->|"k of n hours over the line<br/>(+ time to limit)"| i[("incidents.v1 + core.incident")]
+  i --> ce{"Campaign engine"}
+  ce -->|"same family | model | duty | depot,<br/>≥ 5 vans, Poisson guard"| camp[("core.campaign + clues<br/>campaign.events.v1")]
+  i --> w{"Workshop"}
+  camp --> w
+  w -->|"score, runaways pinned,<br/>bays today / tomorrow"| q[("core.queue_item<br/>queue.events.v1")]
+  q --> a["API (RLS, masking, audit)"]
+  camp --> a
+  a -->|"REST + SSE"| ui["Board · campaign · vehicle page"]

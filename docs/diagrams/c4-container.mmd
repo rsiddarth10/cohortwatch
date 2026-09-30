@@ -1,0 +1,57 @@
+%% C4 level 2: containers (protocol on every arrow). Also the architecture diagram in the README.
+flowchart LR
+  sim["Simulator (Node)<br/>plays both OEM clouds"]
+  subgraph kafka["Redpanda: Kafka API + schema registry"]
+    raw[("raw.oem-a.v1 · raw.oem-b.v1")]
+    can[("telemetry.canonical.v1 (Avro)<br/>telemetry.dlq.v1")]
+    inc[("incidents.v1")]
+    cev[("campaign.events.v1")]
+    qev[("queue.events.v1")]
+    rep[("workshop.repairs.v1<br/>workshop.outcomes.v1")]
+    prp[("agent.proposals.v1 · audit.v1")]
+  end
+  norm["Normaliser ×3 (Node)<br/>adapters, validation, VIN check,<br/>anti-replay, DLQ"]
+  sp["State processor ×3 (Node)<br/>own normal − peers, trend,<br/>k-of-n, incidents, runaway"]
+  ce["Campaign engine (Node)<br/>Poisson guard, union-find,<br/>at-risk sisters, clues"]
+  ws["Workshop (Node)<br/>queue scoring, bays,<br/>fix confirmation"]
+  ag["Agent (Node)<br/>template, evidence, proposals"]
+  api["API (Node, Express)<br/>JWT, RLS, masking, audit, SSE"]
+  web["Web (React, nginx)"]
+  auth["Auth (oidc-provider)"]
+  redis[("Redis<br/>anti-replay state,<br/>detection checkpoints")]
+  pg[("Postgres + TimescaleDB<br/>core (RLS) · sim (ground truth)")]
+  lake[("S3 lake (RustFS)<br/>history Parquet")]
+  batch["Baselines job (Python + DuckDB)"]
+  sim -- "Kafka produce (2 OEM formats)" --> raw
+  raw -- "Kafka consume" --> norm
+  norm -- "Kafka produce (Avro)" --> can
+  norm -- "Redis Lua CAS" --> redis
+  can -- "Kafka consume" --> sp
+  sp -- "Redis checkpoint" --> redis
+  sp -- "SQL COPY / insert" --> pg
+  sp -- "Kafka produce" --> inc
+  inc -- "Kafka consume" --> ce
+  inc -- "Kafka consume" --> ws
+  ce -- "SQL tx + outbox" --> pg
+  ce -- "outbox relay: Kafka produce" --> cev
+  cev -- "Kafka consume" --> ws
+  cev -- "Kafka consume" --> ag
+  ws -- "SQL tx + outbox" --> pg
+  ws -- "outbox relay: Kafka produce" --> qev
+  ws -- "outbox relay: Kafka produce" --> rep
+  rep -- "Kafka consume (repairs, outcomes)" --> sp
+  rep -- "Kafka consume (outcomes)" --> ce
+  qev -- "Kafka consume" --> ag
+  ag -- "SQL tx + outbox" --> pg
+  api -- "SQL per-request tx, RLS" --> pg
+  api -- "Kafka produce (repairs, audit, decisions)" --> prp
+  prp -- "Kafka consume (approved bookings)" --> ws
+  cev -- "Kafka consume, SSE bus" --> api
+  qev -- "Kafka consume, SSE bus" --> api
+  web -- "HTTPS REST + SSE (/api)" --> api
+  web -- "OIDC code + PKCE" --> auth
+  api -- "HTTPS JWKS" --> auth
+  sim -- "S3 PUT (history)" --> lake
+  batch -- "S3 GET (Parquet)" --> lake
+  batch -- "SQL COPY (baselines)" --> pg
+  sim -- "SQL (registry; ground truth in sim schema)" --> pg

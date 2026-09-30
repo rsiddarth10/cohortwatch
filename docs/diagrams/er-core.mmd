@@ -1,0 +1,82 @@
+%% ER diagram: main tables of the core schema (RLS by tenant on the tenant-owned tables)
+erDiagram
+  TENANT ||--o{ FLEET : owns
+  FLEET ||--o{ VEHICLE : has
+  VEHICLE_MODEL ||--o{ VEHICLE : "model of"
+  DUTY_TYPE ||--o{ VEHICLE : "duty of"
+  REGION ||--o{ DEPOT : contains
+  DEPOT ||--o{ VEHICLE_DEPOT_ASSIGNMENT : "assigned (valid range)"
+  VEHICLE ||--o{ VEHICLE_DEPOT_ASSIGNMENT : has
+  DEPOT ||--o{ WORKSHOP_BAY : has
+  DRIVER ||--o{ DRIVER_ASSIGNMENT : "pseudonymous"
+  VEHICLE ||--o{ DRIVER_ASSIGNMENT : has
+  VEHICLE ||--o{ TELEMETRY : "hourly rows (hypertable)"
+  VEHICLE ||--o{ VEHICLE_BASELINE : "own normal"
+  VEHICLE ||--o{ INCIDENT : raises
+  INCIDENT ||--o{ INCIDENT_CLUE : explains
+  CAMPAIGN ||--o{ CAMPAIGN_MEMBER : "PK campaign, vin"
+  VEHICLE ||--o{ CAMPAIGN_MEMBER : joins
+  CAMPAIGN ||--o{ CAMPAIGN_AT_RISK : "at-risk sisters"
+  CAMPAIGN ||--o{ CAMPAIGN_CLUE : explains
+  CAMPAIGN ||--o{ CAMPAIGN_OVERRIDE : dismissals
+  DEPOT ||--o{ QUEUE_ITEM : "ranked queue"
+  VEHICLE ||--o{ QUEUE_ITEM : queued
+  DEPOT ||--o{ QUEUE_BOOKING : "approved bookings"
+  VEHICLE ||--o{ REPAIR : repaired
+  REPAIR ||--o| REPAIR_OUTCOME : "FIXED or NOT_FIXED"
+  DEPOT ||--o{ ALERT_CARD : cards
+  CAMPAIGN ||--o{ PROPOSAL : "agent proposals"
+  TENANT ||--o{ AUDIT : "every view and action"
+  VEHICLE {
+    char17 vin PK
+    smallint tenant_id
+    smallint model_id
+    smallint duty_type_id
+  }
+  TELEMETRY {
+    char17 vin PK
+    timestamptz ts PK
+    real coolant_c
+    real coolant_dev
+    real coolant_z
+    real coolant_zs
+    smallint dtc_count
+  }
+  INCIDENT {
+    uuid id PK
+    char17 vin
+    text fault_family
+    text status
+    timestamptz opened_ts
+    bool runaway
+  }
+  CAMPAIGN {
+    uuid id PK
+    text family_key
+    text status
+    int member_count
+    float p_value
+    int version
+  }
+  QUEUE_ITEM {
+    int depot_id PK
+    char17 vin PK
+    int rank
+    text slot
+    float score
+    jsonb reasons
+  }
+  PROPOSAL {
+    uuid id PK
+    text action_type
+    text status
+    int version
+    text created_by
+    text decided_by
+  }
+  REPAIR {
+    uuid id PK
+    char17 vin
+    timestamptz repaired_ts
+    text status
+  }

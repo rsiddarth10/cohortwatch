@@ -1,0 +1,21 @@
+%% C4 level 1: system context
+flowchart LR
+  oemA["Aurex cloud (OEM-A)<br/><i>external system</i><br/>vehicle telematics feed"]
+  oemB["Kestrel cloud (OEM-B)<br/><i>external system</i><br/>vehicle telematics feed"]
+  lead["Reliability lead<br/><i>person</i>"]
+  planner["Workshop planner<br/><i>person</i>"]
+  viewer["Viewer / contractor<br/><i>person</i>"]
+  idp["Identity provider<br/><i>external system</i><br/>OIDC (local issuer in dev)"]
+  cw["<b>CohortWatch</b><br/><i>software system</i><br/>ranks vans by real risk, groups shared faults<br/>into campaigns, plans the workshop queue"]
+  oemA -- "cloud-to-cloud stream<br/>Kafka API (mTLS in prod)" --> cw
+  oemB -- "cloud-to-cloud stream<br/>Kafka API (mTLS in prod)" --> cw
+  lead -- "HTTPS: board, campaigns,<br/>approves agent proposals" --> cw
+  planner -- "HTTPS: queue, records repairs" --> cw
+  viewer -- "HTTPS: read-only, masked" --> cw
+  cw -- "OIDC code + PKCE, JWKS" --> idp
+  classDef sys fill:#1f6feb,stroke:#0b3d91,color:#fff
+  classDef ext fill:#8b949e,stroke:#57606a,color:#fff
+  classDef person fill:#2da44e,stroke:#116329,color:#fff
+  class cw sys
+  class oemA,oemB,idp ext
+  class lead,planner,viewer person

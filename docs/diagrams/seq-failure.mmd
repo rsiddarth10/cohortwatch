@@ -1,0 +1,24 @@
+%% Sequence 2: failure path: a duplicate and a late event, then a state-processor crash and replay
+sequenceDiagram
+  autonumber
+  participant K as Kafka
+  participant N as Normaliser
+  participant R as Redis
+  participant SP1 as State processor (replica 1)
+  participant SP2 as State processor (replica 2)
+  participant PG as Postgres
+  K->>N: raw reading redelivered (same VIN, same sequence)
+  N->>R: anti-replay window check
+  R-->>N: already seen
+  N->>N: drop, duplicates_dropped + 1 (ledger: in = out + DLQ + duplicates)
+  K->>N: late reading (event time 3 h old)
+  N->>K: canonical, marked late (inside the window) or DLQ (too old)
+  K->>SP1: canonical batch
+  SP1->>PG: incident OPEN (UNIQUE vin, family, window)
+  Note over SP1: SIGKILL before the offset commit
+  K->>SP2: rebalance: the partitions move to replica 2
+  SP2->>R: load the last checkpoint (state per VIN)
+  K->>SP2: replay from the last committed offset
+  SP2->>PG: incident OPEN again → ON CONFLICT DO NOTHING (same id)
+  SP2->>K: produce OPEN again (same incident_id)
+  Note over K,PG: downstream dedupes by id: campaign join PK (campaign, vin), workshop processed_event. Members = unique sisters (chaos test: 168 = 168)

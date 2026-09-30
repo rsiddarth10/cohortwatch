@@ -124,7 +124,11 @@ export function Vehicle({ me }: { me: Me }) {
       <div className="kpis">
         <div>
           <b>{x.queue ? `#${x.queue.rank}` : '—'}</b>
-          {x.queue ? `${x.queue.slot.toLowerCase()} · ${x.queue.cost_text}` : 'not in the queue'}
+          {x.queue
+            ? x.queue.slot === 'WAITING'
+              ? x.queue.cost_text
+              : `${x.queue.slot.toLowerCase()} · ${x.queue.cost_text}`
+            : 'not in the queue'}
         </div>
         <div>
           <b className={x.fix_status === 'NOT_FIXED' ? 'crit' : ''}>{x.fix_status?.replace('_', ' ') ?? '—'}</b>fix

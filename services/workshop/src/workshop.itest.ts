@@ -254,8 +254,8 @@ describe('workshop against real Redpanda + TimescaleDB', () => {
 
     // S8: a lead-approved booking takes its slot, with the reason
     await pool.query(
-      `INSERT INTO core.queue_booking (depot_id, vin, slot, booked_by) VALUES (10, $1, 'TODAY', 'lead')`,
-      [LOUD],
+      `INSERT INTO core.queue_booking (depot_id, vin, slot, booked_by) VALUES (10, $1, 'TODAY', 'lead'), (10, $2, 'TOMORROW', 'lead')`,
+      [LOUD, van(9)], // van(9) has no signal at all: a booked sister stays booked
     );
     await send('agent.proposals.v1', '10', {
       type: 'APPROVED',
@@ -270,5 +270,6 @@ describe('workshop against real Redpanda + TimescaleDB', () => {
       )
     ).rows[0]!;
     expect(booked.reasons[0]).toEqual({ type: 'BOOKED', text: 'booked by lead (approved agent proposal)' });
+    expect((await queue()).find((x) => x.vin === van(9))?.slot).toBe('TOMORROW');
   });
 });

@@ -84,7 +84,7 @@ export function onCampaign(t: CampaignTrigger): { notes: Note[]; proposal: Propo
       id: uuidV5(AGENT_NAMESPACE, `BOOK_AT_RISK|${t.campaignId}|${vins.join(',')}`),
       actionType: 'BOOK_AT_RISK',
       title: `Book the ${n} at-risk sister${n === 1 ? '' : 's'} of the ${t.family} campaign at ${t.depotCode} into tomorrow's bays`,
-      body: `${t.members} vans in this campaign already have the fault. These ${n} share the model, duty and depot and are trending the same way (see evidence). Dry run: ${diff.summary}.`,
+      body: `${t.members} vans in this campaign already have the fault. ${n === 1 ? 'This van shares' : `These ${n} share`} the model, duty and depot and ${n === 1 ? 'is' : 'are'} trending the same way (see evidence). Dry run: ${diff.summary}.`,
       evidence: [
         ...key,
         ...sisters.map((s) => ({

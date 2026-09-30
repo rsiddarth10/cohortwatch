@@ -384,12 +384,18 @@ export class Workshop {
     };
 
     const bays = this.registry.baysAt(depotId);
-    let placed = fillBays(rank(mergeSignals(signals, ctx), this.qp), bays, this.qp);
     // lead-approved bookings (S8 proposals) go into their slot first, after runaways
     const bk = await c.query<{ vin: string; slot: 'TODAY' | 'TOMORROW'; booked_by: string }>(
       'SELECT vin::text AS vin, slot, booked_by FROM core.queue_booking WHERE depot_id = $1',
       [depotId],
     );
+    const cands = mergeSignals(signals, ctx);
+    // a booked van stays booked even when its signal fades (an at-risk sister is booked *before* it fails)
+    const have = new Set(cands.map((x) => x.vin));
+    for (const b of bk.rows)
+      if (!have.has(b.vin))
+        cands.push({ vin: b.vin, depotId, incidents: [], campaigns: [], atRisk: [], notFixed: null, ctx: ctx(b.vin) });
+    let placed = fillBays(rank(cands, this.qp), bays, this.qp);
     const bookedBy = new Map(bk.rows.map((b) => [b.vin, b.booked_by]));
     if (bk.rows.length > 0) {
       const perDay = bays * this.qp.slotsPerBayPerDay;

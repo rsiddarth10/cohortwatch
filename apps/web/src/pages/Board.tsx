@@ -119,6 +119,8 @@ export function Board({ me }: { me: Me }) {
       return dep === undefined || dep === null || dep === depotId;
     },
   );
+  // tenant-wide runaways (critical) lead the strip, even from another depot
+  const allCards = useData(() => api<{ items: (Card & { depot: string })[] }>('/cards?limit=30'), [], ['card']);
   const camps = useData(
     () => api<{ items: CampaignRow[] }>('/campaigns?status=OPEN&limit=100'),
     [depotId],
@@ -127,6 +129,14 @@ export function Board({ me }: { me: Me }) {
   const data = q.data;
   const code = data?.depot.code;
   const open = (camps.data?.items ?? []).filter((c) => c.depot === code);
+  const elsewhere = (allCards.data?.items ?? []).filter(
+    (c) => c.card_type === 'RUNAWAY' && c.status !== 'DONE' && c.depot !== code,
+  );
+  const cards = [
+    ...(data?.cards ?? []).filter((c) => c.card_type === 'RUNAWAY'),
+    ...elsewhere.slice(0, 2),
+    ...(data?.cards ?? []).filter((c) => c.card_type !== 'RUNAWAY'),
+  ].slice(0, 6);
 
   return (
     <div className={`board ${q.flash ? 'flash' : ''}`}>
@@ -157,15 +167,18 @@ export function Board({ me }: { me: Me }) {
         <p className="muted pad">Loading…</p>
       ) : (
         <>
-          {data.cards.length > 0 && (
+          {cards.length > 0 && (
             <section className="strip">
-              {data.cards.slice(0, 6).map((c) => (
+              {cards.map((c) => (
                 <Link
                   key={c.id}
                   to={c.campaign_id ? `/campaigns/${c.campaign_id}` : `/vehicles/${c.vin}`}
                   className={`alert ${c.card_type === 'RUNAWAY' ? 'crit' : 'camp'}`}
                 >
-                  <b>{cardLabel(c.card_type)}</b>
+                  <b>
+                    {cardLabel(c.card_type)}
+                    {'depot' in c && c.depot !== code ? ` · ${String(c.depot)}` : ''}
+                  </b>
                   <span>{c.title}</span>
                   <small>{when(c.event_ts)}</small>
                 </Link>

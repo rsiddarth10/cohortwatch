@@ -22,7 +22,7 @@ Run: 2026-09-30 20:14 → 2026-10-01 (hard stop 07:30 IST). Plan: [docs/plans/s9
 2. **Interruption.** The session was interrupted about 21:00–22:53. The 5K dev stack kept streaming to T0+997 h,
    and its evaluation (background incidents inflated by 40 days of sim time) was discarded. From then on every
    scored run is **bounded by pausing the sim clock** (the new `demo:pause`) at T0+88–89 h.
-3. **Infrastructure trouble, handled.** Docker Desktop stopped twice (I restarted it). Docker Hub / npm had TLS and
+3. **Infrastructure trouble, handled.** Docker Desktop stopped three times (I restarted it each time). Docker Hub / npm had TLS and
    `ECONNRESET` timeouts, so builds retry with `COMPOSE_PARALLEL_LIMIT=2`. Other projects' containers on this machine
    were left alone.
 4. **`eval:all` design.** The three scorecards were refactored into functions that return facts. `eval:all` saves
@@ -54,6 +54,17 @@ Run: 2026-09-30 20:14 → 2026-10-01 (hard stop 07:30 IST). Plan: [docs/plans/s9
 13. **Chaos.** A replica is killed with `docker kill --signal=SIGKILL` and started again with `docker start`, as an
     orchestrator would: Docker's restart policy does not restart a manually killed container.
 14. **Grafana** runs with anonymous viewer access on :3001 (dev only), under the `observability` profile.
+
+15. **ML baseline gap, closed with two more runs.** The first comparison used only the S5 campaign at-risk flag.
+    The queue also has a solo at-risk rule, so the export now adds "flagged AT_RISK in the depot's latest queue
+    snapshot at decision time" as a second baseline, and both seeds were re-run.
+16. **Chaos needed a second attempt.** In run B the chaos script stopped on its first line: under `set -e`, the
+    ledger-discovery loop ended on an unreachable port. My next chain then reset run B before I could re-run it.
+    Fixed, and chaos ran on a dedicated 30K run (run C).
+17. **API rate limit raised for the load test only** (`API_RATE_LIMIT_PER_MIN=1000000`): k6 signs in as one user.
+    With the default limit, a smoke run got 80% 429s, which is the limiter working.
+18. **Docker Desktop stopped a third time** (about 01:30), losing the first seed-7 training run. It was re-run. Long
+    background chains now restart Docker if the engine disappears.
 
 ## Not deleted (for you to decide)
 

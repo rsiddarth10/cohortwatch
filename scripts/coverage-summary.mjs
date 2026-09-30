@@ -27,7 +27,10 @@ const lines = [
   '|---|---|---|---|---|',
   ...Object.entries(rows)
     .sort()
-    .map(([k, r]) => `| ${k} | ${pct(r.lines)} (${r.lines[0]}/${r.lines[1]}) | ${pct(r.branches)} | ${pct(r.functions)} | ${pct(r.statements)} |`),
+    .map(
+      ([k, r]) =>
+        `| ${k} | ${pct(r.lines)} (${r.lines[0]}/${r.lines[1]}) | ${pct(r.branches)} | ${pct(r.functions)} | ${pct(r.statements)} |`,
+    ),
   `| **total** | **${s.total.lines.pct}%** | ${s.total.branches.pct}% | ${s.total.functions.pct}% | ${s.total.statements.pct}% |`,
   '',
 ];

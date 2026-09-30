@@ -14,3 +14,4 @@ pacts
 docs/diagrams/*.svg
 sbom.cdx.json
 docs/security/reports
+deploy/helm/cohortwatch/templates

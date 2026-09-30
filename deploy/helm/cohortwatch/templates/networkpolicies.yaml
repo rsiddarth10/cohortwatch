@@ -1,0 +1,82 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default deny: nothing reaches or leaves a CohortWatch pod unless allowed below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-default-deny
+  labels:
+    {{- include "cw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+---
+# Only the ingress controller reaches the public services (api, web).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-ingress-controller
+  labels:
+    {{- include "cw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [api, web] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace }} }
+---
+# Prometheus (monitoring namespace) scrapes /metrics on every pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-metrics
+  labels:
+    {{- include "cw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }} }
+---
+# Egress: DNS, the managed stores (Kafka 9094 TLS, Postgres 5432, Redis 6379 TLS) and HTTPS (OIDC JWKS).
+# The stores live outside the cluster (MSK, ElastiCache) or in the timescale namespace; restrict further with
+# ipBlock CIDRs of the VPC subnets from Terraform.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-egress
+  labels:
+    {{- include "cw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Egress]
+  egress:
+    - ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    - ports: [{ port: 9094, protocol: TCP }, { port: 5432, protocol: TCP }, { port: 6379, protocol: TCP }, { port: 8081, protocol: TCP }]
+    - ports: [{ port: 443, protocol: TCP }]
+---
+# Inside the release: only the web talks to the api (SSE and REST go through the ingress in production).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-web-to-api
+  labels:
+    {{- include "cw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: api }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/name: web } }
+{{- end }}

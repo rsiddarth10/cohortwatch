@@ -1,0 +1,7 @@
+apiVersion: v2
+name: cohortwatch
+description: CohortWatch app services (normaliser, state processor, campaign engine, workshop, agent, API, web) against external Kafka, Postgres/TimescaleDB and Redis.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords: [fleet, telematics, kafka, timescaledb]

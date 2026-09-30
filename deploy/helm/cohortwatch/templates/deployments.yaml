@@ -1,0 +1,127 @@
+{{- $root := . -}}
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled }}
+{{- $ctx := dict "root" $root "name" $name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cw.fullname" $ctx }}
+  labels:
+    {{- include "cw.labels" $root | nindent 4 }}
+    {{- include "cw.selector" $ctx | nindent 4 }}
+spec:
+  {{- if not (and $svc.hpa $svc.hpa.enabled) }}
+  replicas: {{ $svc.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cw.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cw.selector" $ctx | nindent 8 }}
+        cohortwatch/db: {{ $svc.db | default "none" | quote }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $svc.port | quote }}
+        prometheus.io/path: /metrics
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml $root.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $root.Values.image.registry }}/cohortwatch-{{ $name }}:{{ $root.Values.image.tag }}"
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+          env:
+            - name: LOG_LEVEL
+              value: info
+            {{- if ne $name "web" }}
+            - name: METRICS_PORT
+              value: {{ $svc.port | quote }}
+            - name: PORT
+              value: {{ $svc.port | quote }}
+            {{- end }}
+            {{- if not (eq ($svc.kafka | toString) "false") }}
+            - name: KAFKA_BROKERS
+              value: {{ $root.Values.external.kafkaBrokers | quote }}
+            {{- end }}
+            {{- if eq $svc.db "app" }}
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ $root.Values.secrets.name }}, key: DATABASE_URL_APP } }
+            {{- else if eq $svc.db "api" }}
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ $root.Values.secrets.name }}, key: DATABASE_URL_API } }
+            {{- end }}
+            {{- if $svc.redis }}
+            - name: REDIS_URL
+              valueFrom: { secretKeyRef: { name: {{ $root.Values.secrets.name }}, key: REDIS_URL } }
+            {{- end }}
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ tpl (toString $v) $root | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet: { path: {{ $svc.probePath | default "/healthz" }}, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: {{ $svc.probePath | default "/healthz" }}, port: http }
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          securityContext:
+            {{- $sc := deepCopy $root.Values.containerSecurityContext }}
+            {{- if eq ($svc.readOnlyRootFilesystem | toString) "false" }}{{- $_ := set $sc "readOnlyRootFilesystem" false }}{{- end }}
+            {{- toYaml $sc | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cw.fullname" $ctx }}
+  labels:
+    {{- include "cw.labels" $root | nindent 4 }}
+    {{- include "cw.selector" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "cw.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+{{- if and $svc.hpa $svc.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "cw.fullname" $ctx }}
+  labels:
+    {{- include "cw.labels" $root | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "cw.fullname" $ctx }}
+  minReplicas: {{ $svc.hpa.minReplicas }}
+  maxReplicas: {{ $svc.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: {{ $svc.hpa.targetCPU }} }
+  behavior:
+    scaleDown: { stabilizationWindowSeconds: 300 }
+{{- end }}
+{{- end }}
+{{- end }}

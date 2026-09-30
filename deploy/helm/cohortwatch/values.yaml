@@ -1,0 +1,131 @@
+# CohortWatch Helm values. Kafka (MSK), Postgres/TimescaleDB and Redis (ElastiCache) are EXTERNAL: see deploy/terraform/aws.
+
+image:
+  registry: ghcr.io/rsiddarth10 # images: <registry>/cohortwatch-<service>:<tag>
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# Connection settings (non-secret). Credentials come from the Secret named in `secrets.name`.
+external:
+  kafkaBrokers: "b-1.cohortwatch.kafka.ap-south-1.amazonaws.com:9094,b-2.cohortwatch.kafka.ap-south-1.amazonaws.com:9094"
+  schemaRegistryUrl: "http://schema-registry.cohortwatch.svc:8081"
+  oidcIssuer: "https://login.example.com/realms/cohortwatch"
+  oidcJwksUrl: "https://login.example.com/realms/cohortwatch/protocol/openid-connect/certs"
+  apiAudience: "urn:cohortwatch:api"
+
+# Secret with keys: DATABASE_URL_APP (cw_app), DATABASE_URL_API (cw_api), REDIS_URL.
+# Either it already exists (created by your platform), or the chart asks External Secrets to create it from
+# AWS Secrets Manager (externalSecrets.enabled).
+secrets:
+  name: cohortwatch-credentials
+
+externalSecrets:
+  enabled: true
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: aws-secrets-manager
+  remoteKeys: # Secrets Manager secret name → key in the Kubernetes Secret
+    DATABASE_URL_APP: cohortwatch/database-url-app
+    DATABASE_URL_API: cohortwatch/database-url-api
+    REDIS_URL: cohortwatch/redis-url
+
+ingress:
+  enabled: true
+  className: nginx
+  host: cohortwatch.example.com
+  tlsSecretName: cohortwatch-tls
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off" # SSE on /api/events
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: ingress-nginx
+  monitoringNamespace: monitoring
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile: { type: RuntimeDefault }
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: ["ALL"] }
+
+# One entry per service. port = HTTP port (metrics + /healthz, or the API/web port).
+services:
+  normaliser:
+    enabled: true
+    replicas: 3
+    port: 9465
+    db: none
+    redis: true
+    env:
+      SCHEMA_REGISTRY_URL: "{{ .Values.external.schemaRegistryUrl }}"
+      ENCODING: avro
+    resources: { requests: { cpu: 500m, memory: 512Mi }, limits: { cpu: "2", memory: 1Gi } }
+    hpa: { enabled: true, minReplicas: 3, maxReplicas: 12, targetCPU: 70 }
+  state-processor:
+    enabled: true
+    replicas: 3
+    port: 9466
+    db: app
+    redis: true
+    env:
+      SCHEMA_REGISTRY_URL: "{{ .Values.external.schemaRegistryUrl }}"
+      ENCODING: avro
+    resources: { requests: { cpu: "1", memory: 1536Mi }, limits: { cpu: "2", memory: 3Gi } }
+    hpa: { enabled: true, minReplicas: 3, maxReplicas: 12, targetCPU: 70 }
+  campaign-engine:
+    enabled: true
+    replicas: 2 # one leader (advisory lock), one standby
+    port: 9475
+    db: app
+    resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: "1", memory: 1Gi } }
+  workshop:
+    enabled: true
+    replicas: 2 # one leader for the hourly tick, both consume events
+    port: 9477
+    db: app
+    resources: { requests: { cpu: 500m, memory: 768Mi }, limits: { cpu: "2", memory: 2Gi } }
+  agent:
+    enabled: true
+    replicas: 1
+    port: 9479
+    db: app
+    env:
+      AGENT_ENABLED: "true"
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: 500m, memory: 512Mi } }
+  api:
+    enabled: true
+    replicas: 2
+    port: 3100
+    db: api
+    public: true # reachable from the ingress
+    env:
+      OIDC_ISSUER: "{{ .Values.external.oidcIssuer }}"
+      OIDC_JWKS_URL: "{{ .Values.external.oidcJwksUrl }}"
+      API_AUDIENCE: "{{ .Values.external.apiAudience }}"
+      RATE_LIMIT_PER_MIN: "600"
+    resources: { requests: { cpu: 250m, memory: 384Mi }, limits: { cpu: "1", memory: 1Gi } }
+    hpa: { enabled: true, minReplicas: 2, maxReplicas: 6, targetCPU: 70 }
+  web:
+    enabled: true
+    replicas: 2
+    port: 3000
+    db: none
+    public: true
+    kafka: false
+    readOnlyRootFilesystem: false # nginx writes its cache dirs
+    probePath: /
+    resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 250m, memory: 128Mi } }
+  simulator:
+    enabled: false # demo only: plays the OEM clouds; never deploy it next to real feeds
+    replicas: 1
+    port: 9464
+    db: none
+    resources: { requests: { cpu: "2", memory: 2Gi }, limits: { cpu: "4", memory: 4Gi } }

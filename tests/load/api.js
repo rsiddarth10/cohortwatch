@@ -12,6 +12,7 @@ const PROFILE = __ENV.PROFILE || 'load';
 const params = { headers: { authorization: `Bearer ${__ENV.TOKEN}` }, timeout: '30s' };
 
 const PROFILES = {
+  smoke: { executor: 'constant-vus', vus: 5, duration: '15s' },
   // ramp to 50 concurrent users over 3 minutes: where does latency bend?
   load: {
     executor: 'ramping-vus',

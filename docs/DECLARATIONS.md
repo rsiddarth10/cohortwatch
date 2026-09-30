@@ -11,6 +11,8 @@ Required by the problem statement §14: all open-source components and AI tools 
 The product idea, scope, data design (docs/PROJECT_BRIEF.md) and all decisions are the author's own.
 
 No LLM or AI service runs inside CohortWatch: the S8 "agent" is a template engine over existing evidence (ADR 0020).
+The S9 at-risk classifier is a classical gradient-boosting model trained offline on simulated data (model card:
+docs/ml/model-card.md); it is not wired into the queue unless it beats the rules.
 
 ## Open-source software
 
@@ -53,6 +55,7 @@ No LLM or AI service runs inside CohortWatch: the S8 "agent" is a template engin
 | `duckdb` 1.5.5 (+ `httpfs`, `postgres` extensions) | MIT | Baselines job: reads the history Parquet from the lake and the registry from Postgres, aggregates in SQL |
 | `psycopg[binary]` 3.2.10 | LGPL-3.0 | Baselines job: one-transaction COPY into Postgres |
 | `pytest` 8.4.2 | MIT | Unit test of the baselines job (CI) |
+| `scikit-learn` 1.7.2, `numpy` 2.3.3, `pandas` 2.3.3 | BSD-3-Clause | S9: at-risk classifier (gradient boosting), evaluation metrics (`ml/at_risk`) |
 
 ### Development
 
@@ -66,6 +69,8 @@ No LLM or AI service runs inside CohortWatch: the S8 "agent" is a template engin
 | `@amiceli/vitest-cucumber` 8.0.0 | ISC | BDD: Gherkin feature files (`tests/bdd/*.feature`) run inside Vitest (S5) |
 | `supertest` | MIT | S7: API integration tests (HTTP against the app, real Postgres with RLS) |
 | Playwright (`@playwright/test`, Chromium) | Apache-2.0 | S8: e2e smoke through the real login (local only) and the screenshots |
+| Pact JS (`@pact-foundation/pact`, Pact FFI) | MIT | S9: consumer-driven contract web → API; provider verification against the real API |
+| k6 (`grafana/k6:0.54.0` image) | AGPL-3.0 (used as a separate tool, not linked) | S9: load and soak tests of the API |
 
 ### Infrastructure images
 
@@ -79,6 +84,8 @@ No LLM or AI service runs inside CohortWatch: the S8 "agent" is a template engin
 | AWS CLI `2.37.4` | Apache-2.0 | One-shot bucket creation (`lake-init`) |
 | Node.js `22.23.3-bookworm-slim` | MIT | Service runtime |
 | nginx `1.27.3-alpine` | BSD-2-Clause | S8: serves the web app; proxies `/api` (SSE unbuffered) |
+| Prometheus `v2.55.1` | Apache-2.0 | S9: scrapes every service's `/metrics` (profile `observability`) |
+| Grafana `11.3.1` | AGPL-3.0 (used as a separate service, unmodified) | S9: the provisioned pipeline dashboard (profile `observability`) |
 | Python `3.12.11-slim-bookworm` | PSF-2.0 | Runtime of the baselines batch job (S3) |
 
 ### CI

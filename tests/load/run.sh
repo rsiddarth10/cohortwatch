@@ -7,7 +7,8 @@ SSE_S=${2:-0}
 cd "$(dirname "$0")/../.."
 TOKEN=$(node tests/perf/token.mjs lead)
 if [ "$SSE_S" -gt 0 ]; then node tests/load/sse-clients.mjs 50 "$SSE_S" > "tests/load/sse-$PROFILE.log" 2>&1 & fi
-docker run --rm --network cohortwatch_default -v "$(pwd)/tests/load:/scripts" grafana/k6:0.54.0 \
+HERE=$(pwd -W 2>/dev/null || pwd) # Windows path under Git Bash, POSIX path elsewhere
+MSYS_NO_PATHCONV=1 docker run --rm --network cohortwatch_default -v "$HERE/tests/load:/scripts" grafana/k6:0.54.0 \
   run -q -e TOKEN="$TOKEN" -e API=http://api:3100 -e PROFILE="$PROFILE" /scripts/api.js
 wait
 [ "$SSE_S" -gt 0 ] && tail -1 "tests/load/sse-$PROFILE.log" || true

@@ -10,7 +10,10 @@ Metrics on the test run: PR-AUC (average precision), precision@k per hour (top k
 hours that have at least one positive van), and false positives among heatwave-region and naturally-hot vans at
 the operating point where the model flags as many van-hours as the rule does (a like-for-like comparison).
 
-Usage: python train.py <train.csv.gz> <test.csv.gz> <out_dir>
+Usage: python train.py <train.csv.gz> <test.csv.gz> <out_dir> [full|signals]
+  full    = all detection-visible features, incl. model powertrain, duty and climate zone
+  signals = the van's own signals and its peers' incidents only (no categorical context): the plants sit in the same
+            cohorts under every seed, so categorical features can learn "which cohort breaks" instead of the signal
 """
 
 import json
@@ -40,6 +43,12 @@ def load(path: str) -> pd.DataFrame:
     for b in BOOLEAN + ["rule_at_risk", "rule_global", "gt_fault"]:
         df[b] = df[b].astype(str).str.lower().isin(["true", "t", "1"])
     return df
+
+
+VARIANT = sys.argv[4] if len(sys.argv) > 4 else "full"
+if VARIANT == "signals":
+    CATEGORICAL = []
+    NUMERIC = [c for c in NUMERIC if c != "ambient_c"]
 
 
 def features(df: pd.DataFrame, categories: dict[str, list] | None = None) -> tuple[pd.DataFrame, dict[str, list]]:
@@ -138,6 +147,8 @@ def main() -> None:
             "global_threshold": binary_report(te, glob),
         },
         "feature_importance_note": "HistGradientBoosting has no built-in importances; see permutation_importance",
+        "variant": VARIANT,
+        "features": list(xtr.columns),
         "seconds": round(time.time() - started, 1),
     }
     # permutation importance on a sample of the test run (top features, for the model card)
@@ -148,7 +159,7 @@ def main() -> None:
                                 n_repeats=3, random_state=1)  # fmt: skip
     order = np.argsort(pi.importances_mean)[::-1][:10]
     result["top_features"] = [[xte.columns[i], round(float(pi.importances_mean[i]), 4)] for i in order]
-    (out_dir / "metrics.json").write_text(json.dumps(result, indent=2))
+    (out_dir / f"metrics-{VARIANT}.json").write_text(json.dumps(result, indent=2))
     print(json.dumps({k: result[k] for k in ["train", "test", "pr_auc", "precision_at_k"]}, indent=2))
     print(json.dumps(result["operating_point"], indent=2))
     print("top features:", result["top_features"])

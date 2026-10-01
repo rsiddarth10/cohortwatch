@@ -15,7 +15,7 @@ plus integration tests (Testcontainers), a Python batch test, Semgrep and Trivy,
 | **Contract** (Pact) | 2 interactions (depot queue, campaign page); provider verified against the real API + DB | `npm run test:contract` (consumer), the provider is in the integration run | CI | `pacts/cohortwatch-web-cohortwatch-api.json` |
 | **End-to-end** (Playwright, real OIDC login) | 2: lead → S1 campaign → approve the agent proposal → board shows "booked by lead"; viewer is masked | `npm run test:e2e` (needs the stack) | **local only** | passed at 30K (S8) and on the S10 clean clone |
 | **Evaluation** (every §6 claim vs a baseline, from ground truth) | 11 claims × 2 scales | `npm run eval:all` | local (needs a run) | [docs/evaluation.md](../evaluation.md): 21 of 22 cells ✅ |
-| **Clean-clone test** | fresh `git clone`, README steps, 30K preset | see [overnight-report-3](../overnight-report-3.md) | local | first campaign **332 s** after `up`; e2e passed; 14 FIXED + 1 NOT_FIXED; runaway cards |
+| **Clean-clone test** | fresh `git clone` of `main` into a temp folder; README quick-start steps with the 30K preset (`SIM_SCALE=30000 SIM_SPEED=360 AUTO_REPAIRS=on`, compose project `-p cwclean`); all 18 services healthy | `docker compose up -d` (README) | local | first campaign OPEN **332 s after `up`**; Playwright e2e **2/2 passed**; at T0+86 h: 2 campaigns open, 2 runaway cards, repairs **14 FIXED + 1 NOT_FIXED** (the planted bad repair), the agent proposal approved → booking applied, 326 queue items in 108 depots |
 
 ## Performance, load and resilience
 

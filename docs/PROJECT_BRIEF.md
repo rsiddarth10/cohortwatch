@@ -1,8 +1,8 @@
 # CohortWatch — Project Brief (the constitution)
 
 This file is the source of truth for scope. `CLAUDE.md` points here.
-- **Hard requirements:** `docs/hackathon-problem-statement.pdf` (§6 Challenge, §7 Technical Expectations, §8 Data, §9 Algorithms, §11 NFRs, §12 Testing, §13 Deliverables, §14 Rules).
-- **Detail reference only:** `docs/reference-plan.pdf` (schemas, algorithms, edge cases). If it disagrees with this brief, **this brief wins**.
+- **Hard requirements:** the hackathon problem statement, issued by the organisers and not part of this repository (§6 Challenge, §7 Technical Expectations, §8 Data, §9 Algorithms, §11 NFRs, §12 Testing, §13 Deliverables, §14 Rules).
+- **Detail reference only:** an internal reference plan (schemas, algorithms, edge cases; not part of this repository). If it disagrees with this brief, **this brief wins**.
 - **Scope rule:** build only the current step. Items tagged **[1a]**, **[1b]**, **[S3]** and so on belong to that step.
 
 ---

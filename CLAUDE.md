@@ -1,7 +1,7 @@
 # CohortWatch
 
 Full spec: `docs/PROJECT_BRIEF.md`. Build only the current step.
-Hard requirements: `docs/hackathon-problem-statement.pdf`. Detail reference only: `docs/reference-plan.pdf` (the brief wins).
+Hard requirements: the hackathon problem statement (issued by the organisers; not in the repo). The brief wins over any other reference.
 
 ## Pitch
 The daily workshop queue that ranks vans by real risk and catches shared outbreaks early. Each van is compared to
@@ -69,5 +69,5 @@ services/{state-processor,campaign-engine,api,web,agent}/   later steps (placeho
 infra/db/migrations/  ordered SQL migrations (schemas core + sim, roles)
 infra/kafka/          topic-init script
 tests/                integration / BDD (later)
-docs/                 brief, ADRs (docs/adr/), DECLARATIONS.md, learning notes (docs/learning/)
+docs/                 brief, ADRs (docs/adr/), DECLARATIONS.md, evaluation, perf, security, diagrams, test evidence
 ```
